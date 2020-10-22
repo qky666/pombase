@@ -1,4 +1,5 @@
 anytree==2.8.0
 pyyaml==5.3.1
 python-dateutil==2.8.1
-seleniumbase==1.49.26
+seleniumbase==1.49.27
+lxml==4.6.1
