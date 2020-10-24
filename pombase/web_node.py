@@ -3,7 +3,11 @@ from __future__ import annotations
 import anytree
 import typing
 
-from seleniumbase.fixtures.base_case import By
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
+
+from .pom_base_case import PomBaseCase
+from .util import Util
 
 
 class WebNode(anytree.node.anynode.AnyNode):
@@ -15,8 +19,9 @@ class WebNode(anytree.node.anynode.AnyNode):
                  name: str = None,
                  locator: str = None,  # Allow "id=my_selector", etc.
                  order: int = None,
-                 text_match: str = None,  # Allow * and ? (\*, \?)
-                 use_regexp_in_text_match: bool = None,
+                 text_pattern: str = None,  # Allow * and ? (\*, \?)
+                 ignore_case_in_text_pattern: bool = None,
+                 use_regexp_in_text_pattern: bool = None,
                  override_parent_selector: typing.Union[str, bool] = None,  # If True, use "css selector=html"
                  should_be_present: bool = None,
                  should_be_visible: bool = None,
@@ -25,6 +30,7 @@ class WebNode(anytree.node.anynode.AnyNode):
                  template: typing.Union[str, WebNode] = None,
                  template_args: list = None,
                  template_kwargs: dict = None,
+                 pom_base_case: PomBaseCase = None,
                  **kwargs,
                  ):
         if template_args is None:
@@ -37,8 +43,9 @@ class WebNode(anytree.node.anynode.AnyNode):
         self._name = name
         self._locator = locator
         self._order = order
-        self._text_match = text_match
-        self._use_regexp_in_text_match = use_regexp_in_text_match
+        self._text_pattern = text_pattern
+        self._ignore_case_in_text_pattern = ignore_case_in_text_pattern
+        self._use_regexp_in_text_pattern = use_regexp_in_text_pattern
         self._override_parent_selector = override_parent_selector
         self._should_be_present = should_be_present
         self._should_be_visible = should_be_visible
@@ -47,6 +54,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         self._template = template
         self._template_args = template_args
         self._template_kwargs = template_kwargs
+        self._pom_base_case = pom_base_case
         self._kwargs = kwargs
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -104,31 +112,45 @@ class WebNode(anytree.node.anynode.AnyNode):
         self._order = value
         self.validate()
 
-    # text_match
+    # text_pattern
     @property
-    def text_match(self) -> typing.Optional[str]:
-        if self._text_match is None:
-            if self.template is not None and self.template.text_match is not None:
-                return self.template.text_match.format(*self.template_args, **self.template_kwargs)
-        return self._text_match
+    def text_pattern(self) -> typing.Optional[str]:
+        if self._text_pattern is None:
+            if self.template is not None and self.template.text_pattern is not None:
+                return self.template.text_pattern.format(*self.template_args, **self.template_kwargs)
+        return self._text_pattern
 
-    @text_match.setter
-    def text_match(self, value: typing.Optional[str]) -> None:
-        self._text_match = value
+    @text_pattern.setter
+    def text_pattern(self, value: typing.Optional[str]) -> None:
+        self._text_pattern = value
         self.validate()
 
-    # use_regexp_in_text
+    # ignore_case_in_text_pattern
     @property
-    def use_regexp_in_text(self) -> bool:
-        if self._use_regexp_in_text_match is None:
-            if self.template is not None and self.template.use_regexp_in_text is not None:
-                return self.template.use_regexp_in_text
+    def ignore_case_in_text_pattern(self) -> bool:
+        if self._ignore_case_in_text_pattern is None:
+            if self.template is not None and self.template.ignore_case_in_text_pattern is not None:
+                return self.template.ignore_case_in_text_pattern
             return False
-        return self._use_regexp_in_text_match
+        return self._ignore_case_in_text_pattern
 
-    @use_regexp_in_text.setter
-    def use_regexp_in_text(self, value: typing.Optional[bool]) -> None:
-        self._use_regexp_in_text_match = value
+    @ignore_case_in_text_pattern.setter
+    def ignore_case_in_text_pattern(self, value: typing.Optional[bool]) -> None:
+        self._ignore_case_in_text_pattern = value
+        self.validate()
+
+    # use_regexp_in_text_pattern
+    @property
+    def use_regexp_in_text_pattern(self) -> bool:
+        if self._use_regexp_in_text_pattern is None:
+            if self.template is not None and self.template.use_regexp_in_text_pattern is not None:
+                return self.template.use_regexp_in_text_pattern
+            return False
+        return self._use_regexp_in_text_pattern
+
+    @use_regexp_in_text_pattern.setter
+    def use_regexp_in_text_pattern(self, value: typing.Optional[bool]) -> None:
+        self._use_regexp_in_text_pattern = value
         self.validate()
 
     # override_parent_selector
@@ -243,6 +265,17 @@ class WebNode(anytree.node.anynode.AnyNode):
             self._template_kwargs = value
         self.validate()
 
+    # pom_base_case
+    @property
+    def pom_base_case(self) -> PomBaseCase:
+        if self._pom_base_case is None:
+            return self.root.pom_base_case
+        return self._pom_base_case
+
+    @pom_base_case.setter
+    def pom_base_case(self, value: typing.Optional[PomBaseCase]) -> None:
+        self._pom_base_case = value
+
     ######################
     # Computed properties
     ######################
@@ -260,6 +293,7 @@ class WebNode(anytree.node.anynode.AnyNode):
             full_name = f"{full_name}{self.separator}{self.object_id}"
         return full_name
 
+    @property
     def selector_by_tuple(self) -> typing.Tuple[str, str]:
         bys: typing.Dict[str, typing.List[str]] = {
             By.ID: [By.ID.casefold(),
@@ -303,11 +337,13 @@ class WebNode(anytree.node.anynode.AnyNode):
         else:
             return self.locator, By.CSS_SELECTOR
 
+    @property
     def selector(self) -> str:
-        return self.selector_by_tuple()[0]
+        return self.selector_by_tuple[0]
 
+    @property
     def by(self) -> str:
-        return self.selector_by_tuple()[1]
+        return self.selector_by_tuple[1]
 
     ##############
     # Validations
@@ -334,9 +370,15 @@ class WebNode(anytree.node.anynode.AnyNode):
         if self.locator is not None:
             assert len(self.locator) > 0, f"WebNode validation error: locator={self.locator}"
 
-        if self.use_regexp_in_text is True:
-            assert self.text_match is not None, \
-                f"WebNode validation error: use_regexp_in_text={self.use_regexp_in_text}, text_match={self.text_match}"
+        if self.ignore_case_in_text_pattern is True:
+            assert self.text_pattern is not None, \
+                f"WebNode validation error: ignore_case_in_text_pattern={self.ignore_case_in_text_pattern}, " \
+                f"text_pattern={self.text_pattern}"
+
+        if self.use_regexp_in_text_pattern is True:
+            assert self.text_pattern is not None, \
+                f"WebNode validation error: use_regexp_in_text={self.use_regexp_in_text_pattern}, " \
+                f"text_pattern={self.text_pattern}"
 
         if self.override_parent_selector is not None:
             assert len(self.override_parent_selector) > 0, \
@@ -408,11 +450,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         nodes: typing.List[WebNode] = anytree.findall_by_attr(self, names[0])
         if self in nodes:
             nodes.remove(self)
-        for i in range(1, len(names)):
-            name = names[i]
+        for name in names[1:]:
             new_nodes = []
             for pre_node in nodes:
-                new_nodes.append(anytree.findall_by_attr(pre_node, name))
+                new_nodes = new_nodes + anytree.findall_by_attr(pre_node, name)
             nodes = new_nodes
         return nodes
 
@@ -436,3 +477,76 @@ class WebNode(anytree.node.anynode.AnyNode):
                 assert False, \
                     f"Node with path '{path}' (only_descendants={only_descendants}, whole tree has been searched) " \
                     f"not found starting from node: {self}"
+
+    #######################
+    # Finding web_elements
+    #######################
+    def web_elements(self, only_visible: bool = False) -> typing.List[WebElement]:
+        elements = self.pom_base_case.find_elements(self.root.selector, self.root.by)
+        if elements is None:
+            elements = []
+        # validate elements
+        elements: typing.List[WebElement] = [
+            element for element in elements
+            if Util.web_element_match_text_pattern(element,
+                                                   self.root.text_pattern,
+                                                   self.root.use_regexp_in_text_pattern,
+                                                   self.root.ignore_case_in_text_pattern)
+        ]
+        if self.root.order is not None:
+            one_element: WebElement = elements[self.root.order]
+            elements = [one_element]
+
+        for node in self.path[1:]:
+            new_elements = []
+            for element in elements:
+                new_candidates = element.find_elements(by=node.by, value=node.selector)
+                if new_candidates is None:
+                    new_candidates = []
+                # validate new_candidates
+                new_candidates: typing.List[WebElement] = [
+                    element for element in new_candidates
+                    if Util.web_element_match_text_pattern(element,
+                                                           node.text_pattern,
+                                                           node.use_regexp_in_text_pattern,
+                                                           node.ignore_case_in_text_pattern)
+                ]
+                if node.order is not None:
+                    one_element: WebElement = new_candidates[node.order]
+                    new_candidates = [one_element]
+                new_elements = new_elements + new_candidates
+            elements = new_elements
+        if only_visible is True:
+            elements = [element for element in elements if element.is_displayed() is True]
+        elements = [Util.attach_canonical_xpath_and_node_to_web_element(element, self.pom_base_case.driver)
+                    for element in elements]
+        if None in elements:
+            # Restart process
+            return self.web_elements(only_visible)
+        return elements
+
+    def web_element(self, prefer_visible: bool = True) -> typing.Optional[WebElement]:
+        if prefer_visible is True:
+            visible_elements = self.web_elements(only_visible=True)
+            if len(visible_elements) > 0:
+                return visible_elements[0]
+        elements = self.web_elements()
+        if len(elements) == 0:
+            return None
+        else:
+            return self.web_elements()[0]
+
+    ##############
+    # Node status
+    ##############
+    def is_present(self) -> bool:
+        if self.web_element() is None:
+            return False
+        else:
+            return True
+
+    def is_visible(self) -> bool:
+        if len(self.web_elements(only_visible=True)) == 0:
+            return False
+        else:
+            return True
