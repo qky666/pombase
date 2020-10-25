@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import anytree
 import typing
+import time
+import os
+import importlib
+import inspect
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.remote.errorhandler import NoSuchElementException
+from selenium.webdriver.remote.errorhandler import ElementNotVisibleException
 
-from .pom_base_case import PomBaseCase
-from .util import Util
+from seleniumbase.config import settings
+from seleniumbase.fixtures import shared_utils as s_utils
+from seleniumbase.fixtures.page_actions import timeout_exception
+
+from . import pom_base_case as pbc
+from . import util
+from . import file_loader
+from . import base_settings
 
 
 class WebNode(anytree.node.anynode.AnyNode):
@@ -26,11 +38,13 @@ class WebNode(anytree.node.anynode.AnyNode):
                  should_be_present: bool = None,
                  should_be_visible: bool = None,
                  is_multiple: bool = None,
+                 is_multiple_instance_from: typing.Union[str, WebNode] = None,
                  is_template: bool = None,
                  template: typing.Union[str, WebNode] = None,
                  template_args: list = None,
                  template_kwargs: dict = None,
-                 pom_base_case: PomBaseCase = None,
+                 pom_base_case: pbc.PomBaseCase = None,
+                 desired_class_name: str = None,
                  **kwargs,
                  ):
         if template_args is None:
@@ -50,16 +64,19 @@ class WebNode(anytree.node.anynode.AnyNode):
         self._should_be_present = should_be_present
         self._should_be_visible = should_be_visible
         self._is_multiple = is_multiple
+        self._is_multiple_instance_from = is_multiple_instance_from
         self._is_template = is_template
         self._template = template
         self._template_args = template_args
         self._template_kwargs = template_kwargs
         self._pom_base_case = pom_base_case
+        self._desired_class_name = desired_class_name
         self._kwargs = kwargs
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        super().__init__(parent=parent, children=children)
+        super(WebNode, self).__init__(parent=parent, children=children)
+        self.init_node()
 
     ############
     # Accessors
@@ -215,6 +232,18 @@ class WebNode(anytree.node.anynode.AnyNode):
         self._is_multiple = value
         self.validate()
 
+    # is_multiple_instance_from
+    @property
+    def is_multiple_instance_from(self) -> typing.Optional[WebNode]:
+        if isinstance(self._is_multiple_instance_from, str):
+            return self.get_node(self._is_multiple_instance_from, only_descendants=False)
+        return self._is_multiple_instance_from
+
+    @is_multiple_instance_from.setter
+    def is_multiple_instance_from(self, value: typing.Union[str, WebNode, None]) -> None:
+        self._is_multiple_instance_from = value
+        self.validate()
+
     # is_template
     @property
     def is_template(self) -> bool:
@@ -267,25 +296,57 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     # pom_base_case
     @property
-    def pom_base_case(self) -> PomBaseCase:
+    def pom_base_case(self) -> pbc.PomBaseCase:
         if self._pom_base_case is None:
             return self.root.pom_base_case
         return self._pom_base_case
 
     @pom_base_case.setter
-    def pom_base_case(self, value: typing.Optional[PomBaseCase]) -> None:
+    def pom_base_case(self, value: typing.Optional[pbc.PomBaseCase]) -> None:
         self._pom_base_case = value
+
+    # desired_class_name
+    @property
+    def desired_class_name(self) -> typing.Optional[str]:
+        return self._desired_class_name
+
+    @desired_class_name.setter
+    def desired_class_name(self, value: typing.Optional[str]) -> None:
+        self._desired_class_name = value
 
     ######################
     # Computed properties
     ######################
+    @property
+    def relevant_properties(self) -> typing.Dict[str]:
+        kwargs = {key: getattr(self, key) for key in self._kwargs}
+        return dict(
+            name=self._name,
+            locator=self._locator,
+            order=self._order,
+            text_pattern=self._text_pattern,
+            ignore_case_in_text_pattern=self._ignore_case_in_text_pattern,
+            use_regexp_in_text_pattern=self._use_regexp_in_text_pattern,
+            should_be_present=self._should_be_present,
+            should_be_visible=self._should_be_visible,
+            is_multiple=self._is_multiple,
+            is_multiple_instance_from=self._is_multiple_instance_from,
+            is_template=self._is_template,
+            template=self._template,
+            template_args=self._template_args,
+            template_kwargs=self._template_kwargs,
+            pom_base_case=self._pom_base_case,
+            class_name=self._desired_class_name,
+            **kwargs,
+        )
+
     @property
     def object_id(self) -> int:
         return id(self)
 
     @property
     def full_name(self) -> str:
-        full_name = self.separator
+        full_name = ""
         for node in self.path:
             if node.name is not None:
                 full_name = f"{full_name}{self.separator}{self.name}"
@@ -345,11 +406,23 @@ class WebNode(anytree.node.anynode.AnyNode):
     def by(self) -> str:
         return self.selector_by_tuple[1]
 
+    @property
+    def real_class_name(self) -> str:
+        module = self.__class__.__module__
+        name = self.__class__.__name__
+        return f"{module}.{name}"
+
+    ########
+    # Print
+    ########
+    def __repr__(self):
+        return self.full_name
+
     ##############
     # Validations
     ##############
     def _post_attach(self, parent: WebNode) -> None:
-        super()._post_attach(parent)
+        super(WebNode, self)._post_attach(parent)
         self.validate()
         self.validate_unique_descendant_names()
         parent.nearest_named_ancestor_or_self().validate_unique_descendant_names()
@@ -400,6 +473,40 @@ class WebNode(anytree.node.anynode.AnyNode):
             assert self.name is not None, \
                 f"WebNode validation error: is_multiple={self.is_multiple}, name={self.name}"
 
+        if self.is_multiple_instance_from is not None:
+            assert self.order is not None, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, order={self.order}"
+            assert self.name == f"{self.is_multiple_instance_from.name}_{self.order}", \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, name={self.name}"
+            assert self.locator == self.is_multiple_instance_from.locator, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, locator={self.locator}"
+            assert self.text_pattern == self.is_multiple_instance_from.text_pattern, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, locator={self.text_pattern}"
+            assert self.ignore_case_in_text_pattern == self.is_multiple_instance_from.ignore_case_in_text_pattern, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, " \
+                f"ignore_case_in_text_pattern={self.ignore_case_in_text_pattern}"
+            assert self.use_regexp_in_text_pattern == self.is_multiple_instance_from.use_regexp_in_text_pattern, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, " \
+                f"use_regexp_in_text_pattern={self.use_regexp_in_text_pattern}"
+            assert self.override_parent_selector == self.is_multiple_instance_from.override_parent_selector, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, " \
+                f"override_parent_selector={self.override_parent_selector}"
+            assert self.should_be_present == self.is_multiple_instance_from.should_be_present, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, " \
+                f"should_be_present={self.should_be_present}"
+            assert self.should_be_visible == self.is_multiple_instance_from.should_be_visible, \
+                f"WebNode validation error: " \
+                f"is_multiple_instance_from={self.is_multiple_instance_from}, " \
+                f"should_be_visible={self.should_be_visible}"
+
         if self.is_template is True:
             assert self.name is not None, \
                 f"WebNode validation error: is_template={self.is_template}, name={self.name}"
@@ -427,6 +534,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             assert found[0] == node, \
                 f"Found one node with name '{node.name}', but it is not the expected node. \n" \
                 f"Real: {found[0]} \nExpected: {node}"
+
+    ############
+    # Init node
+    ############
+    def init_node(self) -> None:
+        pass
 
     ################
     # Finding nodes
@@ -488,10 +601,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         # validate elements
         elements: typing.List[WebElement] = [
             element for element in elements
-            if Util.web_element_match_text_pattern(element,
-                                                   self.root.text_pattern,
-                                                   self.root.use_regexp_in_text_pattern,
-                                                   self.root.ignore_case_in_text_pattern)
+            if util.Util.web_element_match_text_pattern(element,
+                                                        self.root.text_pattern,
+                                                        self.root.use_regexp_in_text_pattern,
+                                                        self.root.ignore_case_in_text_pattern)
         ]
         if self.root.order is not None:
             one_element: WebElement = elements[self.root.order]
@@ -506,10 +619,10 @@ class WebNode(anytree.node.anynode.AnyNode):
                 # validate new_candidates
                 new_candidates: typing.List[WebElement] = [
                     element for element in new_candidates
-                    if Util.web_element_match_text_pattern(element,
-                                                           node.text_pattern,
-                                                           node.use_regexp_in_text_pattern,
-                                                           node.ignore_case_in_text_pattern)
+                    if util.Util.web_element_match_text_pattern(element,
+                                                                node.text_pattern,
+                                                                node.use_regexp_in_text_pattern,
+                                                                node.ignore_case_in_text_pattern)
                 ]
                 if node.order is not None:
                     one_element: WebElement = new_candidates[node.order]
@@ -518,7 +631,7 @@ class WebNode(anytree.node.anynode.AnyNode):
             elements = new_elements
         if only_visible is True:
             elements = [element for element in elements if element.is_displayed() is True]
-        elements = [Util.attach_canonical_xpath_and_node_to_web_element(element, self.pom_base_case.driver)
+        elements = [util.Util.attach_canonical_xpath_css_and_node_to_web_element(element, self.pom_base_case.driver)
                     for element in elements]
         if None in elements:
             # Restart process
@@ -550,3 +663,234 @@ class WebNode(anytree.node.anynode.AnyNode):
             return False
         else:
             return True
+
+    #######
+    # Wait
+    #######
+    def wait_until_present(self,
+                           timeout: typing.Union[int, float] = None,
+                           raise_error: bool = True) -> typing.Optional[WebElement]:
+        self.pom_base_case.wait_for_ready_state_complete(timeout)
+        if timeout is None:
+            timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
+        start_ms = time.time() * 1000.0
+        stop_ms = start_ms + (timeout * 1000.0)
+        for x in range(int(timeout * 10)):
+            s_utils.check_if_time_limit_exceeded()
+            element = self.web_element()
+            if element is not None:
+                return element
+            else:
+                now_ms = time.time() * 1000.0
+                if now_ms >= stop_ms:
+                    break
+                time.sleep(0.1)
+        if raise_error is True:
+            plural = "s"
+            if timeout == 1 or timeout == 1.0:
+                plural = ""
+            message = f"WebNode was not present after {timeout} second{plural}: {self}"
+            timeout_exception(NoSuchElementException, message)
+        else:
+            return None
+
+    def wait_until_not_present(self,
+                               timeout: typing.Union[int, float] = None,
+                               raise_error: bool = True) -> bool:
+        self.pom_base_case.wait_for_ready_state_complete(timeout)
+        if timeout is None:
+            timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
+        start_ms = time.time() * 1000.0
+        stop_ms = start_ms + (timeout * 1000.0)
+        for x in range(int(timeout * 10)):
+            s_utils.check_if_time_limit_exceeded()
+            if self.web_element() is None:
+                return True
+            else:
+                now_ms = time.time() * 1000.0
+                if now_ms >= stop_ms:
+                    break
+                time.sleep(0.1)
+        if raise_error is True:
+            plural = "s"
+            if timeout == 1 or timeout == 1.0:
+                plural = ""
+            message = f"WebNode was still present after {timeout} second{plural}: {self}"
+            timeout_exception(Exception, message)
+        else:
+            return False
+
+    def wait_until_visible(self,
+                           timeout: typing.Union[int, float] = None,
+                           raise_error: bool = True) -> typing.Optional[WebElement]:
+        self.pom_base_case.wait_for_ready_state_complete(timeout)
+        if timeout is None:
+            timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
+        start_ms = time.time() * 1000.0
+        stop_ms = start_ms + (timeout * 1000.0)
+        element = None
+        for x in range(int(timeout * 10)):
+            s_utils.check_if_time_limit_exceeded()
+            element = self.web_element()
+            if element is not None and element.is_displayed() is True:
+                return element
+            else:
+                now_ms = time.time() * 1000.0
+                if now_ms >= stop_ms:
+                    break
+                time.sleep(0.1)
+        if raise_error is True:
+            plural = "s"
+            if timeout == 1 or timeout == 1.0:
+                plural = ""
+            if element is None:
+                message = f"WebNode was not present after {timeout} second{plural}: {self}"
+                timeout_exception(NoSuchElementException, message)
+            else:
+                # element is not visible
+                message = f"WebNode was not visible after {timeout} second{plural}: {self}"
+                timeout_exception(ElementNotVisibleException, message)
+        else:
+            return None
+
+    def wait_until_not_visible(self,
+                               timeout: typing.Union[int, float] = None,
+                               raise_error: bool = True) -> bool:
+        self.pom_base_case.wait_for_ready_state_complete(timeout)
+        if timeout is None:
+            timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
+        start_ms = time.time() * 1000.0
+        stop_ms = start_ms + (timeout * 1000.0)
+        for x in range(int(timeout * 10)):
+            s_utils.check_if_time_limit_exceeded()
+            element = self.web_element()
+            if element is None or element.is_displayed() is False:
+                return True
+            else:
+                now_ms = time.time() * 1000.0
+                if now_ms >= stop_ms:
+                    break
+                time.sleep(0.1)
+        if raise_error is True:
+            plural = "s"
+            if timeout == 1 or timeout == 1.0:
+                plural = ""
+            message = f"WebNode was still visible after {timeout} second{plural}: {self}"
+            timeout_exception(Exception, message)
+        else:
+            return False
+
+    def wait_until_loaded(self,
+                          timeout: typing.Union[int, float] = None,
+                          raise_error: bool = True,
+                          force_wait_until_present: bool = True,
+                          force_wait_until_visible: bool = True) -> bool:
+        if self.should_be_present is True or force_wait_until_present is True:
+            present = self.wait_until_present(timeout, raise_error)
+            if present is None:
+                return False
+        if self.should_be_visible is True or force_wait_until_visible is True:
+            visible = self.wait_until_visible(timeout, raise_error)
+            if visible is None:
+                return False
+        for child in self.children:
+            child: WebNode
+            if child.is_template is True:
+                continue
+            loaded = child.wait_until_loaded(timeout,
+                                             raise_error,
+                                             force_wait_until_present=False,
+                                             force_wait_until_visible=False)
+            if loaded is False:
+                return False
+        return True
+
+    ###############
+    # Copy WebNode
+    ###############
+    def copy(self, recursive: bool = False) -> WebNode:
+        node = self.__class__(**self.relevant_properties)
+        if recursive is True:
+            for child in self.children:
+                child: WebNode
+                child_copy = child.copy(recursive=True)
+                child_copy.parent = node
+        return node
+
+    ####################
+    # Multiple children
+    ####################
+    def get_multiple_instances(self) -> typing.List[WebNode]:
+        assert self.is_multiple is True, f"get_multiple_children only works if is_multiple is True. Node: {self}"
+
+        # Clean previous multiple_instances
+        parent: WebNode = self.parent
+        for child in parent.children[:]:
+            child: WebNode
+            if child.is_multiple_instance_from == self:
+                child.parent = None
+
+        # Calculate multiple_instances
+        number = len(self.web_elements())
+        nodes = []
+        for n in range(number):
+            node = self.copy(recursive=True)
+            node.name = f"{self.name}_{n}"
+            node.order = n
+            node.is_multiple = False
+            node.is_multiple_instance_from = self.name
+            node.parent = self.parent
+            nodes.append(node)
+        return nodes
+
+    ##########
+    # Replace
+    ##########
+    def replace(self,
+                new_node: WebNode,
+                keep_new_children: bool = True,
+                keep_replaced_children: bool = False) -> WebNode:
+        parent: WebNode = self.parent
+        self.parent = None
+        new_node.parent = parent
+        if keep_new_children is False:
+            for child in new_node.children[:]:
+                child: WebNode
+                child.parent = None
+        if keep_replaced_children is True:
+            for child in self.children[:]:
+                child: WebNode
+                child.parent = new_node
+        return new_node
+
+    def replace_with_desired_class_node(self, recursive: bool = True) -> WebNode:
+        if self.desired_class_name is not None and self.real_class_name != self.desired_class_name:
+            new_class_parts = self.desired_class_name.split(".")
+            assert len(new_class_parts) > 1, f"Invalid desired_class_name={self.desired_class_name}. Node: {self}"
+            new_module_name = ".".join(new_class_parts[:-1])
+            new_module = importlib.import_module(new_module_name)
+            new_class = getattr(new_module, new_class_parts[-1])
+            new_node: WebNode = new_class(**self.relevant_properties)
+            new_node.desired_class_name = None
+            new_node = self.replace(new_node, keep_new_children=False, keep_replaced_children=True)
+        else:
+            new_node = self
+        if recursive is True:
+            for child in new_node.children[:]:
+                child: WebNode
+                child.replace_with_desired_class_node(recursive=True)
+        return new_node
+
+    ######################
+    # Load node from file
+    ######################
+    @classmethod
+    def load_node_from_file(cls, file: os.PathLike = None) -> typing.Optional[WebNode]:
+        if file is None:
+            file = inspect.getfile(cls)
+        return file_loader.FileLoader.load_node_from_file(file)
+
+    #######################
+    # SeleniumBase actions
+    #######################
+
