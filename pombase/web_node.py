@@ -893,4 +893,216 @@ class WebNode(anytree.node.anynode.AnyNode):
     #######################
     # SeleniumBase actions
     #######################
+    def click(self, timeout: typing.Union[int, float] = None, delay: int = 0) -> None:
+        return self.pom_base_case.click(self, timeout=timeout, delay=delay)
 
+    def slow_click(self, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.slow_click(self, timeout=timeout)
+
+    def double_click(self, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.double_click(self, timeout=timeout)
+
+    def click_chain(self, timeout: typing.Union[int, float] = None, spacing: int = 0) -> None:
+        return self.pom_base_case.click_chain(self, timeout=timeout, spacing=spacing)
+
+    def type(self, text: str, timeout: typing.Union[int, float] = None, retry: bool = True) -> None:
+        return self.pom_base_case.type(self, text, timeout=timeout, retry=retry)
+
+    def add_text(self, text, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.add_text(self, text, timeout=timeout)
+
+    def submit(self) -> None:
+        return self.pom_base_case.submit(self)
+
+    def clear(self, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.clear(self, timeout=timeout)
+
+    def is_text_visible(self, text: str) -> bool:
+        return self.pom_base_case.is_text_visible(text, self)
+
+    def get_text(self, timeout: typing.Union[int, float] = None) -> str:
+        return self.pom_base_case.get_text(self, timeout=timeout)
+
+    def get_attribute(self,
+                      attribute: str,
+                      timeout: typing.Union[int, float] = None,
+                      hard_fail: bool = True) -> typing.Any:
+        return self.pom_base_case.get_attribute(self, attribute, timeout=timeout, hard_fail=hard_fail)
+
+    def set_attribute(self, attribute: str, value: typing.Any, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.set_attribute(self, attribute, value, timeout=timeout)
+
+    def set_attributes(self, attribute: str, value: typing.Any) -> None:
+        return self.pom_base_case.set_attributes(self, attribute, value)
+
+    def remove_attribute(self, attribute: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.remove_attribute(self, attribute, timeout=timeout)
+
+    def remove_attributes(self, attribute: str) -> None:
+        return self.pom_base_case.remove_attributes(self, attribute)
+
+    def get_property_value(self, property: str, timeout: typing.Union[int, float] = None) -> typing.Any:
+        return self.pom_base_case.get_property_value(self, property, timeout=timeout)
+
+    def get_image_url(self, timeout: typing.Union[int, float] = None) -> str:
+        return self.pom_base_case.get_image_url(self, timeout=timeout)
+
+    def click_visible_elements(self, limit: int = 0, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.click_visible_elements(self, limit=limit, timeout=timeout)
+
+    def click_nth_visible_element(self, number: int, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.click_nth_visible_element(self, number, timeout=timeout)
+
+    def click_if_visible(self) -> None:
+        return self.pom_base_case.click_if_visible(self)
+
+    def is_selected(self, timeout: typing.Union[int, float] = None) -> bool:
+        return self.pom_base_case.is_selected(self, timeout=timeout)
+
+    def select_if_unselected(self) -> None:
+        return self.pom_base_case.select_if_unselected(self)
+
+    def unselect_if_selected(self) -> None:
+        return self.pom_base_case.unselect_if_selected(self)
+
+    def is_element_in_an_iframe(self) -> bool:
+        return self.pom_base_case.is_element_in_an_iframe(self)
+
+    def switch_to_frame_of_element(self) -> typing.Optional[str]:
+        return self.pom_base_case.switch_to_frame_of_element(self)
+
+    def hover_on_element(self) -> None:
+        return self.pom_base_case.hover_on_element(self)
+
+    def hover_and_click(self, click_node: typing.Union[str, WebNode], timeout: typing.Union[int, float] = None) -> None:
+        if isinstance(click_node, str):
+            click_node = self.get_node(click_node, only_descendants=False)
+        return self.pom_base_case.hover_and_click(self, click_node, timeout=timeout)
+
+    def hover_and_double_click(self,
+                               click_node: typing.Union[str, WebNode],
+                               timeout: typing.Union[int, float] = None) -> None:
+        if isinstance(click_node, str):
+            click_node = self.get_node(click_node, only_descendants=False)
+        return self.pom_base_case.hover_and_double_click(self, click_node, timeout=timeout)
+
+    def drag_and_drop(self,
+                      drop_node: typing.Union[str, WebNode],
+                      timeout: typing.Union[int, float] = None) -> None:
+        if isinstance(drop_node, str):
+            drop_node = self.get_node(drop_node, only_descendants=False)
+        return self.pom_base_case.drag_and_drop(self, drop_node, timeout=timeout)
+
+    def select_option_by_text(self, option: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.select_option_by_text(self, option, timeout=timeout)
+
+    def select_option_by_index(self, option: int, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.select_option_by_index(self, option, timeout=timeout)
+
+    def select_option_by_value(self, option: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.select_option_by_value(self, option, timeout=timeout)
+
+    def bring_to_front(self) -> None:
+        return self.pom_base_case.bring_to_front(self)
+
+    def highlight_click(self, loops: int = 3, scroll: bool = True) -> None:
+        return self.pom_base_case.highlight_click(self, loops=loops, scroll=scroll)
+
+    def highlight_update_text(self, text: str, loops: int = 3, scroll: bool = True) -> None:
+        return self.pom_base_case.highlight_update_text(self, text, loops=loops, scroll=scroll)
+
+    def highlight(self, loops: int = 4, scroll: bool = True) -> None:
+        return self.pom_base_case.highlight(self, loops=loops, scroll=scroll)
+
+    def press_up_arrow(self, times: int = 1) -> None:
+        return self.pom_base_case.press_up_arrow(self, times=times)
+
+    def press_down_arrow(self, times: int = 1) -> None:
+        return self.pom_base_case.press_down_arrow(self, times=times)
+
+    def press_left_arrow(self, times: int = 1) -> None:
+        return self.pom_base_case.press_left_arrow(self, times=times)
+
+    def press_right_arrow(self, times: int = 1) -> None:
+        return self.pom_base_case.press_right_arrow(self, times=times)
+
+    def scroll_to(self) -> None:
+        return self.pom_base_case.scroll_to(self)
+
+    def slow_scroll_to(self) -> None:
+        return self.pom_base_case.slow_scroll_to(self)
+
+    def js_click(self, all_matches: bool = False) -> None:
+        return self.pom_base_case.js_click(self, all_matches=all_matches)
+
+    def js_click_all(self) -> None:
+        return self.pom_base_case.js_click_all(self)
+
+    def jquery_click(self) -> None:
+        return self.pom_base_case.jquery_click(self)
+
+    def jquery_click_all(self) -> None:
+        return self.pom_base_case.jquery_click_all(self)
+
+    def hide_element(self) -> None:
+        return self.pom_base_case.hide_element(self)
+
+    def hide_elements(self) -> None:
+        return self.pom_base_case.hide_elements(self)
+
+    def show_element(self) -> None:
+        return self.pom_base_case.show_element(self)
+
+    def show_elements(self) -> None:
+        return self.pom_base_case.show_elements(self)
+
+    def remove_element(self) -> None:
+        return self.pom_base_case.remove_element(self)
+
+    def remove_elements(self) -> None:
+        return self.pom_base_case.remove_elements(self)
+
+    def choose_file(self, file_path: os.PathLike, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.choose_file(self, file_path, timeout=timeout)
+
+    def save_element_as_image_file(self, file_name: os.PathLike, folder: os.PathLike = None) -> None:
+        return self.pom_base_case.save_element_as_image_file(self, file_name, folder)
+
+    def set_value(self, text: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.set_value(self, text, timeout=timeout)
+
+    def js_update_text(self, text: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.js_update_text(self, text, timeout=timeout)
+
+    def jquery_update_text(self, text: str, timeout: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.jquery_update_text(self, text, timeout=timeout)
+
+    def add_tour_step(self,
+                      message: str,
+                      name: str = None,
+                      title: str = None,
+                      theme: str = None,
+                      alignment: str = None,
+                      duration: typing.Union[int, float] = None) -> None:
+        return self.pom_base_case.add_tour_step(message, self, name, title, theme, alignment, duration)
+
+    def post_message_and_highlight(self, message) -> None:
+        return self.pom_base_case.post_message_and_highlight(message, self)
+
+    def find_text(self, text: str, timeout: typing.Union[int, float] = None) -> WebElement:
+        return self.pom_base_case.find_text(text, self, timeout=timeout)
+
+    def wait_for_exact_text_visible(self, text: str, timeout: typing.Union[int, float] = None) -> WebElement:
+        return self.pom_base_case.wait_for_exact_text_visible(text, self, timeout=timeout)
+
+    def assert_text(self, text: str, timeout: typing.Union[int, float] = None) -> bool:
+        return self.pom_base_case.assert_text(text, self, timeout=timeout)
+
+    def assert_exact_text(self, text: str, timeout: typing.Union[int, float] = None) -> bool:
+        return self.pom_base_case.assert_exact_text(text, self, timeout=timeout)
+
+    def wait_for_text_not_visible(self, text: str, timeout: typing.Union[int, float] = None) -> bool:
+        return self.pom_base_case.wait_for_text_not_visible(text, self, timeout=timeout)
+
+    def assert_text_not_visible(self, text: str, timeout: typing.Union[int, float] = None) -> bool:
+        return self.pom_base_case.assert_text_not_visible(text, self, timeout=timeout)
