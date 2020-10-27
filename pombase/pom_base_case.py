@@ -12,7 +12,7 @@ from selenium.webdriver.remote.errorhandler import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
 
 from . import web_node
-from . import util
+from . import web_element_util
 from . import base_settings
 
 
@@ -38,9 +38,9 @@ class PomBaseCase(BaseCase):
                 assert selector.is_displayed() is True, \
                     f"WebElement should be visible, but it is not. WebElement: {selector}"
             if use_css is True:
-                css = getattr(selector, util.Util.CANONICAL_CSS, None)
+                css = getattr(selector, web_element_util.WebElementUtil.CANONICAL_CSS, None)
                 if css is None:
-                    selector = util.Util.attach_canonical_xpath_css_and_node_to_web_element(selector, node)
+                    selector = web_element_util.WebElementUtil.attach_canonical_xpath_css_and_node_to_web_element(selector, node)
                     if selector is None:
                         timeout = base_settings.BaseSettings.apply_timeout_multiplier(self, default_timeout)
                         plural = "s"
@@ -51,13 +51,13 @@ class PomBaseCase(BaseCase):
                     if required_visible is True:
                         assert selector.is_displayed() is True, \
                             f"WebElement should be visible, but it is not. WebElement: {selector}"
-                    css = getattr(selector, util.Util.CANONICAL_CSS)
+                    css = getattr(selector, web_element_util.WebElementUtil.CANONICAL_CSS)
                 selector = css
                 by = By.CSS_SELECTOR
             else:
-                xpath = getattr(selector, util.Util.CANONICAL_XPATH, None)
+                xpath = getattr(selector, web_element_util.WebElementUtil.CANONICAL_XPATH, None)
                 if xpath is None:
-                    selector = util.Util.attach_canonical_xpath_css_and_node_to_web_element(selector, node)
+                    selector = web_element_util.WebElementUtil.attach_canonical_xpath_css_and_node_to_web_element(selector, node)
                     if selector is None:
                         timeout = base_settings.BaseSettings.apply_timeout_multiplier(self, default_timeout)
                         plural = "s"
@@ -68,7 +68,7 @@ class PomBaseCase(BaseCase):
                     if required_visible is True:
                         assert selector.is_displayed() is True, \
                             f"WebElement should be visible, but it is not. WebElement: {selector}"
-                    xpath = getattr(selector, util.Util.CANONICAL_XPATH)
+                    xpath = getattr(selector, web_element_util.WebElementUtil.CANONICAL_XPATH)
                 selector = xpath
                 by = By.XPATH
         return selector, by

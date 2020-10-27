@@ -10,7 +10,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from . import web_node
 
 
-class Util:
+class WebElementUtil:
     CANONICAL_XPATH = "pom_canonical_xpath"
     CANONICAL_CSS = "pom_canonical_css"
     WEB_NODE = "pom_web_node"
@@ -138,16 +138,16 @@ class Util:
     @staticmethod
     def attach_canonical_xpath_css_and_node_to_web_element(web_element: WebElement,
                                                            node: web_node.WebNode = None) -> typing.Optional[WebElement]:
-        xpath = Util.canonical_xpath_for_web_element(web_element, node.pom_base_case.driver)
+        xpath = WebElementUtil.canonical_xpath_for_web_element(web_element, node.pom_base_case.driver)
         if xpath is None:
             return None
-        setattr(web_element, Util.CANONICAL_XPATH, xpath)
-        css = Util.canonical_css_for_web_element(web_element, node.pom_base_case.driver)
+        setattr(web_element, WebElementUtil.CANONICAL_XPATH, xpath)
+        css = WebElementUtil.canonical_css_for_web_element(web_element, node.pom_base_case.driver)
         if css is None:
             return None
-        setattr(web_element, Util.CANONICAL_CSS, css)
+        setattr(web_element, WebElementUtil.CANONICAL_CSS, css)
         if node is not None:
-            setattr(web_element, Util.WEB_NODE, node)
+            setattr(web_element, WebElementUtil.WEB_NODE, node)
         return web_element
 
     @staticmethod
@@ -159,9 +159,9 @@ class Util:
                 return False
         except StaleElementReferenceException:
             return False
-        xpath = getattr(web_element, Util.CANONICAL_XPATH)
-        css = getattr(web_element, Util.CANONICAL_CSS)
-        node = getattr(web_element, Util.WEB_NODE)
+        xpath = getattr(web_element, WebElementUtil.CANONICAL_XPATH)
+        css = getattr(web_element, WebElementUtil.CANONICAL_CSS)
+        node = getattr(web_element, WebElementUtil.WEB_NODE)
         driver = node.pom_base_case.driver
         xpath_element = driver.find_element_by_xpath(xpath)
         css_element = driver.find_element_by_css_selector(css)

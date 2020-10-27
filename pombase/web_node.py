@@ -6,20 +6,26 @@ import time
 import os
 import importlib
 import inspect
+import logging
+import datetime
+
+from dateutil.parser import ParserError
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.remote.errorhandler import NoSuchElementException
 from selenium.webdriver.remote.errorhandler import ElementNotVisibleException
+from selenium.webdriver.support.select import Select
 
 from seleniumbase.config import settings
 from seleniumbase.fixtures import shared_utils as s_utils
 from seleniumbase.fixtures.page_actions import timeout_exception
 
 from . import pom_base_case as pbc
-from . import util
+from . import web_element_util
 from . import file_loader
 from . import base_settings
+from . import date_util
 
 
 class WebNode(anytree.node.anynode.AnyNode):
@@ -76,6 +82,9 @@ class WebNode(anytree.node.anynode.AnyNode):
             setattr(self, key, value)
 
         super(WebNode, self).__init__(parent=parent, children=children)
+
+        self.logger = logging.getLogger()
+
         self.init_node()
 
     ############
@@ -601,10 +610,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         # validate elements
         elements: typing.List[WebElement] = [
             element for element in elements
-            if util.Util.web_element_match_text_pattern(element,
-                                                        self.root.text_pattern,
-                                                        self.root.use_regexp_in_text_pattern,
-                                                        self.root.ignore_case_in_text_pattern)
+            if web_element_util.WebElementUtil.web_element_match_text_pattern(element,
+                                                                              self.root.text_pattern,
+                                                                              self.root.use_regexp_in_text_pattern,
+                                                                              self.root.ignore_case_in_text_pattern)
         ]
         if self.root.order is not None:
             one_element: WebElement = elements[self.root.order]
@@ -619,10 +628,10 @@ class WebNode(anytree.node.anynode.AnyNode):
                 # validate new_candidates
                 new_candidates: typing.List[WebElement] = [
                     element for element in new_candidates
-                    if util.Util.web_element_match_text_pattern(element,
-                                                                node.text_pattern,
-                                                                node.use_regexp_in_text_pattern,
-                                                                node.ignore_case_in_text_pattern)
+                    if web_element_util.WebElementUtil.web_element_match_text_pattern(element,
+                                                                                      node.text_pattern,
+                                                                                      node.use_regexp_in_text_pattern,
+                                                                                      node.ignore_case_in_text_pattern)
                 ]
                 if node.order is not None:
                     one_element: WebElement = new_candidates[node.order]
@@ -631,7 +640,8 @@ class WebNode(anytree.node.anynode.AnyNode):
             elements = new_elements
         if only_visible is True:
             elements = [element for element in elements if element.is_displayed() is True]
-        elements = [util.Util.attach_canonical_xpath_css_and_node_to_web_element(element, self.pom_base_case.driver)
+        elements = [web_element_util.WebElementUtil.attach_canonical_xpath_css_and_node_to_web_element(element,
+                                                                                                       self.pom_base_case.driver)
                     for element in elements]
         if None in elements:
             # Restart process
@@ -669,7 +679,8 @@ class WebNode(anytree.node.anynode.AnyNode):
     #######
     def wait_until_present(self,
                            timeout: typing.Union[int, float] = None,
-                           raise_error: bool = True) -> typing.Optional[WebElement]:
+                           raise_error: bool = True,
+                           prefer_visible: bool = True) -> typing.Optional[WebElement]:
         self.pom_base_case.wait_for_ready_state_complete(timeout)
         if timeout is None:
             timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
@@ -677,7 +688,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         stop_ms = start_ms + (timeout * 1000.0)
         for x in range(int(timeout * 10)):
             s_utils.check_if_time_limit_exceeded()
-            element = self.web_element()
+            element = self.web_element(prefer_visible)
             if element is not None:
                 return element
             else:
@@ -1106,3 +1117,207 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     def assert_text_not_visible(self, text: str, timeout: typing.Union[int, float] = None) -> bool:
         return self.pom_base_case.assert_text_not_visible(text, self, timeout=timeout)
+
+    ################
+    # Other actions
+    ################
+    def get_tag_name(self, timeout: typing.Union[int, float] = None) -> typing.Optional[str]:
+        element = self.wait_until_present(timeout, raise_error=False)
+        if element is None:
+            return None
+        else:
+            return element.tag_name
+
+    ################
+    # get/set value
+    ################
+    def get_field_str_value(self,
+                            timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                            **kwargs) -> typing.Optional[str]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_str_value: {kwargs}. Node: {self}")
+        element = self.wait_until_present(timeout, raise_error=False)
+        if element is None:
+            return None
+        text = element.text
+        tag_name = element.tag_name
+        if text in [None, ""] and tag_name.casefold() == "input".casefold():
+            text = element.get_attribute("value")
+        if tag_name.casefold() == "select".casefold():
+            select = Select(element)
+            text = select.first_selected_option
+        return text
+
+    def get_field_int_value(self,
+                            timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                            **kwargs) -> typing.Optional[int]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_int_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        element = self.web_element()
+        if element is None:
+            return None
+        tag_name = element.tag_name
+        if tag_name.casefold() == "select".casefold():
+            for i, option in enumerate(Select(element).options):
+                if text == option:
+                    return i
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
+    def get_field_float_value(self,
+                              timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                              **kwargs) -> typing.Optional[float]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_float_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+    def get_field_bool_value(self,
+                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             **kwargs) -> typing.Optional[bool]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_bool_value: {kwargs}. Node: {self}")
+        element = self.wait_until_present(timeout, raise_error=False)
+        if element is None:
+            return None
+        tag_name = element.tag_name
+        element_type = element.get_attribute("type")
+        if tag_name.casefold() == "input".casefold() \
+                and isinstance(element_type, str) \
+                and element_type.casefold() in ["checkbox".casefold(), "radio".casefold()]:
+            return element.is_selected()
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        if text.casefold() == "true".casefold():
+            return True
+        elif text.casefold() == "false".casefold():
+            return False
+        return None
+
+    def get_field_date_value(self,
+                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             **kwargs) -> typing.Optional[datetime.date]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_date_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        try:
+            return date_util.DateUtil.parse_date_es(text)
+        except ParserError:
+            return None
+
+    def get_field_datetime_value(self,
+                                 timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                                 **kwargs) -> typing.Optional[datetime.datetime]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_datetime_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        try:
+            return date_util.DateUtil.parse_datetime_es(text)
+        except ParserError:
+            return None
+
+    def get_field_time_value(self,
+                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             **kwargs) -> typing.Optional[datetime.time]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_time_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        try:
+            return date_util.DateUtil.parse_time_es(text)
+        except ParserError:
+            return None
+
+    def get_field_list_value(self,
+                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             **kwargs) -> typing.Optional[list]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_list_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        element = self.web_element()
+        if element is None:
+            return None
+        tag_name = element.tag_name
+        if tag_name.casefold() == "select".casefold():
+            select = Select(element)
+            return select.all_selected_options
+        return text.splitlines()
+
+    def get_field_dict_value(self,
+                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             **kwargs) -> typing.Optional[dict]:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in get_field_dict_value: {kwargs}. Node: {self}")
+        text = self.get_field_str_value(timeout)
+        if text is None:
+            return None
+        return dict(text=text)
+
+    def set_field_value(self,
+                        value: typing.Any,
+                        timeout: typing.Union[int, float] = None,
+                        **kwargs) -> None:
+        if len(kwargs) > 0:
+            self.logger.info(f"kwargs received in set_field_value: {kwargs}. Node: {self}")
+        if value is None:
+            return
+        element = self.wait_until_present(timeout)
+        tag_name = element.tag_name
+        element_type = element.get_attribute("type")
+        if tag_name.casefold() == "input".casefold():
+            if isinstance(element_type, str) and element_type.casefold() == "text".casefold():
+                element.send_keys(str(value))
+            elif isinstance(element_type, str) and element_type.casefold() == "checkbox".casefold():
+                if value is True:
+                    self.select_if_unselected()
+                elif value is False:
+                    self.unselect_if_selected()
+                elif isinstance(value, str) and value.casefold() == "true".casefold():
+                    self.select_if_unselected()
+                elif isinstance(value, str) and value.casefold() == "false".casefold():
+                    self.unselect_if_selected()
+                elif isinstance(value, str) and value.casefold() == "toggle".casefold():
+                    self.click()
+                else:
+                    raise Exception(
+                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                    )
+            elif isinstance(element_type, str) and element_type.casefold() == "radio".casefold():
+                if value is True:
+                    self.select_if_unselected()
+                elif value is False:
+                    self.unselect_if_selected()
+                elif isinstance(value, str) and value.casefold() == "true".casefold():
+                    self.select_if_unselected()
+                else:
+                    raise Exception(
+                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                    )
+            elif isinstance(element_type, str) and element_type.casefold() == "file".casefold():
+                self.choose_file(os.path.abspath(value), timeout)
+            else:
+                raise Exception(
+                    f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                )
+        else:
+            raise Exception(
+                f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+            )
