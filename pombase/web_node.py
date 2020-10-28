@@ -8,6 +8,7 @@ import importlib
 import inspect
 import logging
 import datetime
+import itertools
 
 from dateutil.parser import ParserError
 
@@ -674,6 +675,19 @@ class WebNode(anytree.node.anynode.AnyNode):
         else:
             return True
 
+    #########
+    # Iframe
+    #########
+    def is_iframe(self) -> bool:
+        tag_name = self.get_tag_name()
+        if isinstance(tag_name, str) and tag_name.casefold() == "iframe".casefold():
+            return True
+        else:
+            return False
+
+    def switch_to_default_content(self):
+        self.pom_base_case.switch_to_default_content()
+
     #######
     # Wait
     #######
@@ -796,13 +810,25 @@ class WebNode(anytree.node.anynode.AnyNode):
                           raise_error: bool = True,
                           force_wait_until_present: bool = True,
                           force_wait_until_visible: bool = True) -> bool:
+        # Handle frames
+        element_in_iframe = self.is_element_in_an_iframe()
+        if element_in_iframe is True:
+            for node in self.path[:-1]:
+                node: WebNode
+                if node.is_iframe() is True:
+                    node.switch_to_frame(timeout)
+
         if self.should_be_present is True or force_wait_until_present is True:
             present = self.wait_until_present(timeout, raise_error)
             if present is None:
+                if element_in_iframe is True:
+                    self.switch_to_default_content()
                 return False
         if self.should_be_visible is True or force_wait_until_visible is True:
             visible = self.wait_until_visible(timeout, raise_error)
             if visible is None:
+                if element_in_iframe is True:
+                    self.switch_to_default_content()
                 return False
         for child in self.children:
             child: WebNode
@@ -813,7 +839,11 @@ class WebNode(anytree.node.anynode.AnyNode):
                                              force_wait_until_present=False,
                                              force_wait_until_visible=False)
             if loaded is False:
+                if element_in_iframe is True:
+                    self.switch_to_default_content()
                 return False
+        if element_in_iframe is True:
+            self.switch_to_default_content()
         return True
 
     ###############
@@ -1012,6 +1042,9 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     def select_option_by_value(self, option: str, timeout: typing.Union[int, float] = None) -> None:
         return self.pom_base_case.select_option_by_value(self, option, timeout=timeout)
+
+    def switch_to_frame(self, timeout: typing.Union[int, float] = None):
+        return self.pom_base_case.switch_to_frame(self, timeout)
 
     def bring_to_front(self) -> None:
         return self.pom_base_case.bring_to_front(self)
@@ -1321,3 +1354,72 @@ class WebNode(anytree.node.anynode.AnyNode):
             raise Exception(
                 f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
             )
+
+    ########
+    # Alias
+    ########
+    def all_names_to_node(self) -> typing.List[str]:
+        all_names = self.full_name.split(self.separator)
+        while "" in all_names:
+            all_names.remove("")
+        return all_names
+
+    def minimal_names_to_node(self) -> typing.List[str]:
+        # If name is None, return id (always unique)
+        if self.name is None:
+            return [self.all_names_to_node()[-1]]
+
+        # possible combinations
+        name_combinations = list(itertools.product([True, False], repeat=len(self.all_names_to_node()) - 1))
+        # always include last name
+        name_combinations = [combination + (True,) for combination in name_combinations]
+        # sort possible combinations (lowest True first)
+        name_combinations.sort(key=lambda tup: tup.count(True))
+
+        for combination in name_combinations:
+            include_names = []
+            for i, item in enumerate(combination):
+                if item is True:
+                    include_names.append(self.all_names_to_node()[i])
+            if self.check_names_to_node(include_names) is True:
+                return include_names
+        else:
+            assert False, f"Minimal names to node not found. These should not be possible. Node: {self}"
+
+    def check_names_to_node(self, names: typing.List[str]) -> bool:
+        try:
+            found = self.root.get_node(self.separator.join(names))
+        except AssertionError:
+            return False
+        if found == self:
+            return True
+        else:
+            return False
+
+    def node_alias(self) -> str:
+        return f"node_{'__'.join(self.minimal_names_to_node())}"
+
+    ####################################################
+    # get_field_/set_field_/clear_field_/_value methods
+    ####################################################
+    def get_set_clear_field_value_methods(self) -> typing.List[str]:
+        methods = [method_name for method_name in dir(self)
+                   if method_name.startswith(("get_field_", "set_field_", "clear_field_"))
+                   and method_name.endswith("_value")
+                   and callable(getattr(self, method_name))]
+        return methods
+
+    def get_set_clear_value_descendant_methods(self) -> typing.List[typing.Dict[str, typing.Union[str, WebNode]]]:
+        named_descendants = list(anytree.search.findall(self, filter_=lambda n: n.name is not None))
+        if self in named_descendants:
+            named_descendants.remove(self)
+        methods = []
+        for node in named_descendants:
+            node: WebNode
+            node_alias = node.node_alias().replace("node_", "", 1)
+            for method in node.get_set_clear_field_value_methods():
+                # remove "_value"
+                method = method[:(-1) * len("_value")]
+                method_alias = f"{method}_{node_alias}_value"
+                methods.append(dict(method_alias=method_alias, node=node, method=method))
+        return methods
