@@ -1402,6 +1402,20 @@ class WebNode(anytree.node.anynode.AnyNode):
     ####################################################
     # get_field_/set_field_/clear_field_/_value methods
     ####################################################
+    def named_descendants(self) -> typing.List[WebNode]:
+        named_descendants = []
+        for child in self.children:
+            child: WebNode
+            if child.name is not None:
+                named_descendants.append(child)
+            named_descendants = named_descendants + child.named_descendants()
+
+        # named_descendants = list(anytree.search.findall(self, filter_=lambda n: n.name is not None))
+        # if self in named_descendants:
+        #     named_descendants.remove(self)
+
+        return named_descendants
+
     def get_set_clear_field_value_methods(self) -> typing.List[str]:
         methods = [method_name for method_name in dir(self)
                    if method_name.startswith(("get_field_", "set_field_", "clear_field_"))
@@ -1410,16 +1424,31 @@ class WebNode(anytree.node.anynode.AnyNode):
         return methods
 
     def get_set_clear_value_descendant_methods(self) -> typing.List[typing.Dict[str, typing.Union[str, WebNode]]]:
-        named_descendants = list(anytree.search.findall(self, filter_=lambda n: n.name is not None))
-        if self in named_descendants:
-            named_descendants.remove(self)
         methods = []
-        for node in named_descendants:
+        for node in self.named_descendants():
             node: WebNode
             node_alias = node.node_alias().replace("node_", "", 1)
             for method in node.get_set_clear_field_value_methods():
                 # remove "_value"
-                method = method[:(-1) * len("_value")]
-                method_alias = f"{method}_{node_alias}_value"
+                method_alias = method[:(-1) * len("_value")]
+                method_alias = f"{method_alias}_{node_alias}_value"
                 methods.append(dict(method_alias=method_alias, node=node, method=method))
         return methods
+
+    def __getattr__(self, item: str) -> typing.Any:
+        # Named nodes
+        for node in self.named_descendants():
+            if item == node.node_alias():
+                return node
+            for d in node.get_set_clear_value_descendant_methods():
+                if item == d["method_alias"]:
+                    return getattr(node, d["method"])
+        raise AttributeError
+
+    ######
+    # pyi
+    ######
+    def pyi(self) -> str:
+        pyi = f"class {self.__class__.__name__}:\n"
+
+        return pyi
