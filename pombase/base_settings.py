@@ -19,3 +19,5 @@ class BaseSettings:
             except ValueError:
                 # Wrong data type for timeout_multiplier (expecting int or float)
                 return timeout
+        else:
+            return timeout

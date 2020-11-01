@@ -136,8 +136,11 @@ class WebElementUtil:
         return css
 
     @staticmethod
-    def attach_canonical_xpath_css_and_node_to_web_element(web_element: WebElement,
-                                                           node: web_node.WebNode = None) -> typing.Optional[WebElement]:
+    def attach_canonical_xpath_css_and_node_to_web_element(
+            web_element: WebElement,
+            node: web_node.WebNode = None,
+    ) -> typing.Optional[WebElement]:
+
         xpath = WebElementUtil.canonical_xpath_for_web_element(web_element, node.pom_base_case.driver)
         if xpath is None:
             return None

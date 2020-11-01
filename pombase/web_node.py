@@ -4,6 +4,7 @@ import anytree
 import typing
 import time
 import os
+import pathlib
 import importlib
 import inspect
 import logging
@@ -58,6 +59,9 @@ class WebNode(anytree.node.anynode.AnyNode):
             template_args = []
         if template_kwargs is None:
             template_kwargs = {}
+
+        if children is None:
+            children = []
 
         self.parent: WebNode
         self.children: typing.Iterable[WebNode]
@@ -359,7 +363,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         full_name = ""
         for node in self.path:
             if node.name is not None:
-                full_name = f"{full_name}{self.separator}{self.name}"
+                full_name = f"{full_name}{self.separator}{node.name}"
         if self.name is None:
             full_name = f"{full_name}{self.separator}{self.object_id}"
         return full_name
@@ -420,6 +424,12 @@ class WebNode(anytree.node.anynode.AnyNode):
     def real_class_name(self) -> str:
         module = self.__class__.__module__
         name = self.__class__.__name__
+        return f"{module}.{name}"
+
+    @classmethod
+    def class_name(cls) -> str:
+        module = cls.__module__
+        name = cls.__name__
         return f"{module}.{name}"
 
     ########
@@ -534,7 +544,7 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     def validate_unique_descendant_names(self) -> None:
         nearest = self.nearest_named_ancestor_or_self()
-        named: typing.List[WebNode] = anytree.findall(nearest, lambda node: node.name is not None)
+        named: typing.List[WebNode] = list(anytree.findall(nearest, lambda node: node.name is not None))
         if nearest in named:
             named.remove(nearest)
         named = [node for node in named if node.nearest_named_ancestor_or_self() == nearest]
@@ -629,10 +639,12 @@ class WebNode(anytree.node.anynode.AnyNode):
                 # validate new_candidates
                 new_candidates: typing.List[WebElement] = [
                     element for element in new_candidates
-                    if web_element_util.WebElementUtil.web_element_match_text_pattern(element,
-                                                                                      node.text_pattern,
-                                                                                      node.use_regexp_in_text_pattern,
-                                                                                      node.ignore_case_in_text_pattern)
+                    if web_element_util.WebElementUtil.web_element_match_text_pattern(
+                        element,
+                        node.text_pattern,
+                        node.use_regexp_in_text_pattern,
+                        node.ignore_case_in_text_pattern,
+                    )
                 ]
                 if node.order is not None:
                     one_element: WebElement = new_candidates[node.order]
@@ -641,8 +653,7 @@ class WebNode(anytree.node.anynode.AnyNode):
             elements = new_elements
         if only_visible is True:
             elements = [element for element in elements if element.is_displayed() is True]
-        elements = [web_element_util.WebElementUtil.attach_canonical_xpath_css_and_node_to_web_element(element,
-                                                                                                       self.pom_base_case.driver)
+        elements = [web_element_util.WebElementUtil.attach_canonical_xpath_css_and_node_to_web_element(element, self)
                     for element in elements]
         if None in elements:
             # Restart process
@@ -695,6 +706,7 @@ class WebNode(anytree.node.anynode.AnyNode):
                            timeout: typing.Union[int, float] = None,
                            raise_error: bool = True,
                            prefer_visible: bool = True) -> typing.Optional[WebElement]:
+        self.logger.info(f"Starting wait_until_present for node: {self}")
         self.pom_base_case.wait_for_ready_state_complete(timeout)
         if timeout is None:
             timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
@@ -722,6 +734,7 @@ class WebNode(anytree.node.anynode.AnyNode):
     def wait_until_not_present(self,
                                timeout: typing.Union[int, float] = None,
                                raise_error: bool = True) -> bool:
+        self.logger.info(f"Starting wait_until_not_present for node: {self}")
         self.pom_base_case.wait_for_ready_state_complete(timeout)
         if timeout is None:
             timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
@@ -748,6 +761,7 @@ class WebNode(anytree.node.anynode.AnyNode):
     def wait_until_visible(self,
                            timeout: typing.Union[int, float] = None,
                            raise_error: bool = True) -> typing.Optional[WebElement]:
+        self.logger.info(f"Starting wait_until_visible for node: {self}")
         self.pom_base_case.wait_for_ready_state_complete(timeout)
         if timeout is None:
             timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
@@ -781,6 +795,7 @@ class WebNode(anytree.node.anynode.AnyNode):
     def wait_until_not_visible(self,
                                timeout: typing.Union[int, float] = None,
                                raise_error: bool = True) -> bool:
+        self.logger.info(f"Starting wait_until_not_visible for node: {self}")
         self.pom_base_case.wait_for_ready_state_complete(timeout)
         if timeout is None:
             timeout = base_settings.BaseSettings.apply_timeout_multiplier(self.pom_base_case, settings.LARGE_TIMEOUT)
@@ -810,6 +825,7 @@ class WebNode(anytree.node.anynode.AnyNode):
                           raise_error: bool = True,
                           force_wait_until_present: bool = True,
                           force_wait_until_visible: bool = True) -> bool:
+        self.logger.info(f"Starting wait_until_loaded for node: {self}")
         # Handle frames
         element_in_iframe = self.is_element_in_an_iframe()
         if element_in_iframe is True:
@@ -926,10 +942,21 @@ class WebNode(anytree.node.anynode.AnyNode):
     # Load node from file
     ######################
     @classmethod
-    def load_node_from_file(cls, file: os.PathLike = None) -> typing.Optional[WebNode]:
+    def load_node_from_file(cls, pom_base_case: pbc.PomBaseCase, file: os.PathLike = None) -> typing.Optional[WebNode]:
         if file is None:
             file = inspect.getfile(cls)
-        return file_loader.FileLoader.load_node_from_file(file)
+            file_no_ext, ext = os.path.splitext(file)
+            yaml_ext = [".yml", ".yaml"]
+            for ext in yaml_ext:
+                new_file = os.path.abspath(f"{file_no_ext}{ext}")
+                if os.path.exists(new_file):
+                    new_file = pathlib.Path(new_file)
+                    node = file_loader.FileLoader.load_node_from_file(new_file)
+                    # node.desired_class_name = cls.class_name
+                    node.replace_with_desired_class_node(recursive=False)
+                    node.pom_base_case = pom_base_case
+                    return node
+        return None
 
     #######################
     # SeleniumBase actions
@@ -1165,10 +1192,12 @@ class WebNode(anytree.node.anynode.AnyNode):
     # get/set value
     ################
     def get_field_str_value(self,
-                            timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                            timeout: typing.Union[int, float] = None,
                             **kwargs) -> typing.Optional[str]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_str_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         element = self.wait_until_present(timeout, raise_error=False)
         if element is None:
             return None
@@ -1182,10 +1211,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         return text
 
     def get_field_int_value(self,
-                            timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                            timeout: typing.Union[int, float] = None,
                             **kwargs) -> typing.Optional[int]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_int_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1203,10 +1234,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             return None
 
     def get_field_float_value(self,
-                              timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                              timeout: typing.Union[int, float] = None,
                               **kwargs) -> typing.Optional[float]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_float_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1216,10 +1249,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             return None
 
     def get_field_bool_value(self,
-                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             timeout: typing.Union[int, float] = None,
                              **kwargs) -> typing.Optional[bool]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_bool_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         element = self.wait_until_present(timeout, raise_error=False)
         if element is None:
             return None
@@ -1239,10 +1274,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         return None
 
     def get_field_date_value(self,
-                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             timeout: typing.Union[int, float] = None,
                              **kwargs) -> typing.Optional[datetime.date]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_date_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1252,10 +1289,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             return None
 
     def get_field_datetime_value(self,
-                                 timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                                 timeout: typing.Union[int, float] = None,
                                  **kwargs) -> typing.Optional[datetime.datetime]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_datetime_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1265,10 +1304,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             return None
 
     def get_field_time_value(self,
-                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             timeout: typing.Union[int, float] = None,
                              **kwargs) -> typing.Optional[datetime.time]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_time_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1278,10 +1319,12 @@ class WebNode(anytree.node.anynode.AnyNode):
             return None
 
     def get_field_list_value(self,
-                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             timeout: typing.Union[int, float] = None,
                              **kwargs) -> typing.Optional[list]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_list_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1295,10 +1338,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         return text.splitlines()
 
     def get_field_dict_value(self,
-                             timeout: typing.Union[int, float] = settings.MINI_TIMEOUT,
+                             timeout: typing.Union[int, float] = None,
                              **kwargs) -> typing.Optional[dict]:
         if len(kwargs) > 0:
             self.logger.info(f"kwargs received in get_field_dict_value: {kwargs}. Node: {self}")
+        if timeout is None:
+            timeout = settings.MINI_TIMEOUT
         text = self.get_field_str_value(timeout)
         if text is None:
             return None
@@ -1403,17 +1448,9 @@ class WebNode(anytree.node.anynode.AnyNode):
     # get_field_/set_field_/clear_field_/_value methods
     ####################################################
     def named_descendants(self) -> typing.List[WebNode]:
-        named_descendants = []
-        for child in self.children:
-            child: WebNode
-            if child.name is not None:
-                named_descendants.append(child)
-            named_descendants = named_descendants + child.named_descendants()
-
-        # named_descendants = list(anytree.search.findall(self, filter_=lambda n: n.name is not None))
-        # if self in named_descendants:
-        #     named_descendants.remove(self)
-
+        named_descendants = list(anytree.search.findall(self, filter_=lambda n: n.name is not None))
+        if self in named_descendants:
+            named_descendants.remove(self)
         return named_descendants
 
     def get_set_clear_field_value_methods(self) -> typing.List[str]:
@@ -1437,12 +1474,13 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     def __getattr__(self, item: str) -> typing.Any:
         # Named nodes
-        for node in self.named_descendants():
-            if item == node.node_alias():
-                return node
-            for d in node.get_set_clear_value_descendant_methods():
+        if item.startswith(("node_", "get_field_", "set_field_", "clear_field_")):
+            for node in self.named_descendants():
+                if item == node.node_alias():
+                    return node
+            for d in self.get_set_clear_value_descendant_methods():
                 if item == d["method_alias"]:
-                    return getattr(node, d["method"])
+                    return getattr(d["node"], d["method"])
         raise AttributeError
 
     ######
@@ -1450,5 +1488,42 @@ class WebNode(anytree.node.anynode.AnyNode):
     ######
     def pyi(self) -> str:
         pyi = f"class {self.__class__.__name__}:\n"
-
+        pyi = f"{pyi}    # Nodes: \n"
+        for node in self.named_descendants():
+            pyi = f"{pyi}    {node.node_alias()}: WebNode\n"
+        pyi = f"{pyi}    # Methods: \n"
+        for d in self.get_set_clear_value_descendant_methods():
+            method = getattr(d["node"], d["method"])
+            signature = inspect.signature(method)
+            pyi = f"{pyi}    def {d['method_alias']}{signature}\n"
+        pyi = f"{pyi}    # fill_form: \n"
+        pyi = f"{pyi}    def fill_form(\n"
+        for d in self.get_set_clear_value_descendant_methods():
+            pyi = f"{pyi}        {d['method_alias']},\n"
+        pyi = f"{pyi}    )\n"
         return pyi
+
+    ############
+    # fill_form
+    ############
+    def fill_form(self, **kwargs) -> typing.Dict[str, typing.Any]:
+        my_dict = {}
+        for kw, parm in kwargs.items():
+            chunks = kw.split("__")
+            assert len(chunks) <= 2, f"Invalid kwarg in fill_form: {kw}"
+            method_alias = chunks[0]
+            method = getattr(self, method_alias)
+            if isinstance(parm, typing.Tuple):
+                parm_args, parm_kwargs = parm
+            elif isinstance(parm, list):
+                parm_args = parm
+                parm_kwargs = {}
+            elif isinstance(parm, dict):
+                parm_args = []
+                parm_kwargs = parm
+            else:
+                parm_args = [parm]
+                parm_kwargs = {}
+            value = method(*parm_args, **parm_kwargs)
+            my_dict[kw] = value
+        return my_dict
