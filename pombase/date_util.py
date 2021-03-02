@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dateutil.parser
 import datetime
 
@@ -39,17 +41,17 @@ class ParserInfoEs(dateutil.parser.parserinfo):
 
 class DateUtil:
     @staticmethod
-    def parse_datetime_es(datestr: str) -> datetime.datetime:
-        parserinfo_es = ParserInfoEs()
-        return dateutil.parser.parse(datestr, parserinfo_es)
+    def parse_datetime_es(date_str: str) -> datetime.datetime:
+        parser_info_es = ParserInfoEs()
+        return dateutil.parser.parse(date_str, parser_info_es)
 
     @staticmethod
-    def parse_date_es(datestr: str) -> datetime.date:
-        return DateUtil.parse_datetime_es(datestr).date()
+    def parse_date_es(date_str: str) -> datetime.date:
+        return DateUtil.parse_datetime_es(date_str).date()
 
     @staticmethod
-    def parse_time_es(datestr: str) -> datetime.time:
-        return DateUtil.parse_datetime_es(datestr).time()
+    def parse_time_es(date_str: str) -> datetime.time:
+        return DateUtil.parse_datetime_es(date_str).time()
 
     @staticmethod
     def python_format_date(date: datetime.datetime, python_format_str: str = "{date.day}/{date:%m}/{date.year}") -> str:

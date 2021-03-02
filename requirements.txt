@@ -1,6 +1,8 @@
 anytree==2.8.0
-pyyaml==5.3.1
+pyyaml==5.4.1
 python-dateutil==2.8.1
-seleniumbase==1.50.16
+seleniumbase==1.55.1
 regex==2020.11.13
-selenium    # required by seleniumbase. Line nedded by PyCharm to not complain about using selenium directly
+inflection==0.5.1
+selenium    # required by seleniumbase. Line nedded by PyCharm to not complain about using it directly
+cssselect   # required by seleniumbase. Line nedded by PyCharm to not complain about using it directly

@@ -1,5 +1,0 @@
-children:
-    - name: home
-      locator: a[href='https://demoqa.com']
-      should_be_visible: True
-desired_class_name: examples.pages.tools_qa_main.ToolsQaMain
