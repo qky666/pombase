@@ -15,7 +15,9 @@ from seleniumbase import BaseCase
 
 from cssselect.xpath import GenericTranslator
 
-from . import base_settings, wait_util, str_util, action
+import pombase.util
+from pombase import util
+from pombase.prev_version import action, base_settings
 
 SelectorByTuple = collections.namedtuple("SelectorByTuple", "selector by")
 
@@ -198,7 +200,7 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     @classmethod
     def selector_by_tuple_for_locator(cls, locator: str) -> SelectorByTuple:
-        bys = {key: str_util.expand_list_replacing_spaces_and_underscores(value) for key, value in cls.bys.items()}
+        bys = {key: pombase.util.expand_replacing_spaces_and_underscores(value) for key, value in cls.bys.items()}
 
         possible_by = locator
         used_sep = None
@@ -209,7 +211,7 @@ class WebNode(anytree.node.anynode.AnyNode):
 
         if used_sep is not None:
             for key, value in bys.items():
-                if str_util.caseless_text_in_list(possible_by, value):
+                if pombase.util.caseless_text_in_texts(possible_by, value):
                     by = key
                     selector = locator[len(possible_by) + len(used_sep):]
                     return SelectorByTuple(selector, by)
@@ -592,7 +594,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         if element is None:
             return False
         tag_name = element.tag_name
-        if isinstance(tag_name, str) and str_util.caseless_equal(tag_name, "iframe"):
+        if isinstance(tag_name, str) and pombase.util.caseless_equal(tag_name, "iframe"):
             return True
         else:
             return False
@@ -623,7 +625,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode was not present after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self.is_present, timeout=timeout, raise_error=raise_error)
+        success, _ = util.wait_until(self.is_present, timeout=timeout, raise_error=raise_error)
         return success
 
     def wait_until_not_present(self,
@@ -637,10 +639,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode was still present after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self.is_present,
-                                          timeout=timeout,
-                                          expected=False,
-                                          raise_error=raise_error)
+        success, _ = util.wait_until(self.is_present,
+                                     timeout=timeout,
+                                     expected=False,
+                                     raise_error=raise_error)
         return success
 
     def wait_until_visible(self,
@@ -658,9 +660,9 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode was not visible after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self.is_visible,
-                                          timeout=timeout,
-                                          raise_error=raise_error)
+        success, _ = util.wait_until(self.is_visible,
+                                     timeout=timeout,
+                                     raise_error=raise_error)
         return success
 
     def wait_until_not_visible(self,
@@ -678,10 +680,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode was still visible after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self.is_visible,
-                                          timeout=timeout,
-                                          expected=False,
-                                          raise_error=raise_error)
+        success, _ = util.wait_until(self.is_visible,
+                                     timeout=timeout,
+                                     expected=False,
+                                     raise_error=raise_error)
         return success
 
     def wait_until_valid_count(self,
@@ -696,10 +698,10 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode had not valid count after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self._has_valid_count,
-                                          args=[force_valid_count_greater_than_zero, ],
-                                          timeout=timeout,
-                                          raise_error=raise_error)
+        success, _ = util.wait_until(self._has_valid_count,
+                                     args=[force_valid_count_greater_than_zero, ],
+                                     timeout=timeout,
+                                     raise_error=raise_error)
         return success
 
     def wait_until_loaded(self,
@@ -753,7 +755,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode value is not '{value}' after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(self._get_value, timeout=timeout, expected=value, raise_error=raise_error)
+        success, _ = util.wait_until(self._get_value, timeout=timeout, expected=value, raise_error=raise_error)
         return success
 
     def wait_until_value_is_not(self,
@@ -768,7 +770,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode value is '{value}' after {timeout} second{plural}: {self}" \
             if raise_error is True else None
-        success, _ = wait_util.wait_until(
+        success, _ = util.wait_until(
             self._get_value,
             timeout=timeout,
             expected=value,
@@ -860,12 +862,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         tag_name = element.tag_name
         text = element.text
         element_type = element.get_attribute("type")
-        if str_util.caseless_equal(tag_name, "input"):
-            if isinstance(element_type, str) and str_util.caseless_text_in_list(element_type, ["checkbox", "radio"]):
+        if pombase.util.caseless_equal(tag_name, "input"):
+            if isinstance(element_type, str) and pombase.util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
                 return element.is_selected()
             elif text in [None, ""]:
                 return element.get_attribute("value")
-        if str_util.caseless_equal(tag_name, "select"):
+        if pombase.util.caseless_equal(tag_name, "select"):
             select = Select(element)
             selected: typing.List[WebElement] = select.all_selected_options
             if len(selected) == 1:
@@ -879,34 +881,34 @@ class WebNode(anytree.node.anynode.AnyNode):
         element = self.wait_for_web_element()
         tag_name = element.tag_name
         element_type = element.get_attribute("type")
-        if str_util.caseless_equal(tag_name, "input"):
-            if isinstance(element_type, str) and str_util.caseless_equal(element_type, "text"):
+        if pombase.util.caseless_equal(tag_name, "input"):
+            if isinstance(element_type, str) and pombase.util.caseless_equal(element_type, "text"):
                 element.send_keys(str(value))
-            elif isinstance(element_type, str) and str_util.caseless_equal(element_type, "checkbox"):
-                if value is True or (isinstance(value, str) and str_util.caseless_equal(value, "true")):
+            elif isinstance(element_type, str) and pombase.util.caseless_equal(element_type, "checkbox"):
+                if value is True or (isinstance(value, str) and pombase.util.caseless_equal(value, "true")):
                     self.select_if_unselected()
-                elif value is False or (isinstance(value, str) and str_util.caseless_equal(value, "false")):
+                elif value is False or (isinstance(value, str) and pombase.util.caseless_equal(value, "false")):
                     self.unselect_if_selected()
-                elif isinstance(value, str) and str_util.caseless_equal(value, "toggle"):
+                elif isinstance(value, str) and pombase.util.caseless_equal(value, "toggle"):
                     self.click()
                 else:
                     raise Exception(
                         f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
                     )
-            elif isinstance(element_type, str) and str_util.caseless_equal(element_type, "radio"):
-                if value is True or (isinstance(value, str) and str_util.caseless_equal(value, "true")):
+            elif isinstance(element_type, str) and pombase.util.caseless_equal(element_type, "radio"):
+                if value is True or (isinstance(value, str) and pombase.util.caseless_equal(value, "true")):
                     self.select_if_unselected()
                 else:
                     raise Exception(
                         f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
                     )
-            elif isinstance(element_type, str) and str_util.caseless_equal(element_type, "file"):
+            elif isinstance(element_type, str) and pombase.util.caseless_equal(element_type, "file"):
                 self.choose_file(os.path.abspath(value))
             else:
                 raise Exception(
                     f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
                 )
-        if str_util.caseless_equal(tag_name, "select"):
+        if pombase.util.caseless_equal(tag_name, "select"):
             select = Select(element)
             if isinstance(value, str):
                 select.select_by_visible_text(value)

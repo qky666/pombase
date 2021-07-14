@@ -32,8 +32,9 @@ setuptools.setup(
     #               'pombase.resources.template_files': ['*'], },
     # include_package_data=True,
     install_requires=read_file('requirements.txt').splitlines(),
-    # entry_points={
-    #     'console_scripts': ['pombase=pombase.cli.pombase:pombase_entry']
-    # },
+    entry_points={
+        "pytest11": ["pombase = pombase.pytest_plugin"],
+        # "console_scripts": ["pombase=pombase.cli.pombase:pombase_entry"]
+    },
     # test_suite="tests"
 )

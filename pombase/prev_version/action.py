@@ -4,7 +4,7 @@ import typing
 import inflection
 import os
 
-from . import web_node
+from pombase.prev_version import web_node
 
 
 class Action:
