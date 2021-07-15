@@ -1,6 +1,6 @@
 from __future__ import annotations
 import typing
-import _pytest.config as ptconfig
+import _pytest.config as pt_config
 # noinspection PyPackageRequirements
 import src.testproject.enums as tp_enums
 # noinspection PyPackageRequirements
@@ -21,11 +21,11 @@ class Config:
         return cls._instance
 
     @property
-    def pytest_config(self) -> typing.Optional[ptconfig.Config]:
+    def pytest_config(self) -> typing.Optional[pt_config.Config]:
         return self._pytest_config
 
     @pytest_config.setter
-    def pytest_config(self, c: ptconfig.Config) -> None:
+    def pytest_config(self, c: pt_config.Config) -> None:
         self._pytest_config = c
 
     @property

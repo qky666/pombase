@@ -4,7 +4,7 @@ import typing
 import datetime
 import time
 import unicodedata
-import dateutil.parser
+import dateutil.parser as dateutil_parser
 
 
 T = typing.TypeVar('T')
@@ -70,7 +70,7 @@ def wait_until(f: typing.Callable[..., T],
             return False, value
 
 
-class ParserInfoEs(dateutil.parser.parserinfo):
+class ParserInfoEs(dateutil_parser.parserinfo):
     HMS = [('h', 'hour', 'hours', 'hora', 'horas'),
            ('m', 'minute', 'minutes', 'minuto', 'minutos'),
            ('s', 'second', 'seconds', 'segundo', 'segundos')]
@@ -109,7 +109,7 @@ class DateUtil:
     @staticmethod
     def parse_datetime_es(date_str: str) -> datetime.datetime:
         parser_info_es = ParserInfoEs()
-        return dateutil.parser.parse(date_str, parser_info_es)
+        return dateutil_parser.parse(date_str, parser_info_es)
 
     @staticmethod
     def parse_date_es(date_str: str) -> datetime.date:

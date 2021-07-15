@@ -3,10 +3,10 @@ import typing
 import os
 import selenium.webdriver.remote.webdriver as webdriver
 import seleniumbase
-import seleniumbase.config.settings as sbsettings
+import seleniumbase.config.settings as sb_settings
 import seleniumbase.core.browser_launcher as browser_launcher
 import seleniumbase.core.download_helper as download_helper
-import seleniumbase.fixtures.constants as sbconstants
+import seleniumbase.fixtures.constants as sb_constants
 import seleniumbase.fixtures.page_utils as page_utils
 import selenium.webdriver.common.desired_capabilities as desired_capabilities
 import selenium.webdriver.ie.options as selenium_ie_options
@@ -19,7 +19,7 @@ import src.testproject.enums as tp_enums
 import src.testproject.enums.environmentvariable as environmentvariable
 
 
-import pombase.webdriver as tp_webdriver
+import pombase.webdriver as pb_webdriver
 import pombase.config as pb_config
 import pombase.constant as constants
 import pombase.util as util
@@ -122,7 +122,7 @@ class PomBaseCase(seleniumbase.BaseCase):
 
             driver_class = constants.TP_DRIVER_CLASS[browser]
             driver_kwargs = {}
-            if driver_class == tp_webdriver.Firefox:
+            if driver_class == pb_webdriver.Firefox:
                 firefox_options = browser_launcher._set_firefox_options(
                     downloads_path=downloads_path,
                     headless=headless,
@@ -140,7 +140,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                     }
                 driver_kwargs["firefox_options"] = firefox_options
                 driver_kwargs["desired_capabilities"] = firefox_capabilities
-            elif driver_class == tp_webdriver.Ie:
+            elif driver_class == pb_webdriver.Ie:
                 ie_options = selenium_ie_options.Options()
                 ie_options.ignore_protected_mode_settings = True
                 ie_options.ignore_zoom_level = True
@@ -150,7 +150,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                 ie_options.persistent_hover = True
                 ie_capabilities = ie_options.to_capabilities()
                 driver_kwargs["capabilities"] = ie_capabilities
-            elif driver_class == tp_webdriver.Edge:
+            elif driver_class == pb_webdriver.Edge:
                 prefs = {
                     "download.default_directory": downloads_path,
                     "local_discovery.notifications_enabled": False,
@@ -238,7 +238,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                 edge_options.add_argument("--dom-automation")
                 edge_options.add_argument("--disable-hang-monitor")
                 edge_options.add_argument("--disable-prompt-on-repost")
-                if (sbsettings.DISABLE_CSP_ON_CHROME or disable_csp) and not headless:
+                if (sb_settings.DISABLE_CSP_ON_CHROME or disable_csp) and not headless:
                     # Headless Edge doesn't support extensions, which are required
                     # for disabling the Content Security Policy on Edge
                     edge_options = browser_launcher._add_chrome_disable_csp_extension(edge_options)
@@ -285,16 +285,16 @@ class PomBaseCase(seleniumbase.BaseCase):
                 capabilities = edge_options.to_capabilities()
                 capabilities["platform"] = ""
                 driver_kwargs["capabilities"] = capabilities
-            elif driver_class == tp_webdriver.Safari:
+            elif driver_class == pb_webdriver.Safari:
                 safari_capabilities = browser_launcher._set_safari_capabilities()
                 driver_kwargs["desired_capabilities"] = safari_capabilities
-            elif driver_class == tp_webdriver.Chrome:
+            elif driver_class == pb_webdriver.Chrome:
                 if user_data_dir and len(user_data_dir) < 3:
                     raise Exception(
                         "Name length of Chrome's User Data Directory must be >= 3."
                     )
                 chrome_options = browser_launcher._set_chrome_options(
-                    browser_name=sbconstants.Browser.GOOGLE_CHROME,
+                    browser_name=sb_constants.Browser.GOOGLE_CHROME,
                     downloads_path=downloads_path,
                     headless=headless,
                     locale_code=locale_code,
@@ -385,8 +385,8 @@ class PomBaseCase(seleniumbase.BaseCase):
             self.browser = browser_name
             if self.headless:
                 # Make sure the invisible browser window is big enough
-                width = sbsettings.HEADLESS_START_WIDTH
-                height = sbsettings.HEADLESS_START_HEIGHT
+                width = sb_settings.HEADLESS_START_WIDTH
+                height = sb_settings.HEADLESS_START_HEIGHT
                 # noinspection PyBroadException
                 try:
                     self.driver.set_window_size(width, height)
@@ -398,8 +398,8 @@ class PomBaseCase(seleniumbase.BaseCase):
                     pass
             else:
                 if self.browser == "chrome" or self.browser == "edge":
-                    width = sbsettings.CHROME_START_WIDTH
-                    height = sbsettings.CHROME_START_HEIGHT
+                    width = sb_settings.CHROME_START_WIDTH
+                    height = sb_settings.CHROME_START_HEIGHT
                     # noinspection PyBroadException
                     try:
                         if self.maximize_option:
@@ -410,7 +410,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                     except Exception:
                         pass  # Keep existing browser resolution
                 elif self.browser == "firefox":
-                    width = sbsettings.CHROME_START_WIDTH
+                    width = sb_settings.CHROME_START_WIDTH
                     # noinspection PyBroadException
                     try:
                         if self.maximize_option:
@@ -421,7 +421,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                     except Exception:
                         pass  # Keep existing browser resolution
                 elif self.browser == "safari":
-                    width = sbsettings.CHROME_START_WIDTH
+                    width = sb_settings.CHROME_START_WIDTH
                     if self.maximize_option:
                         # noinspection PyBroadException
                         try:
@@ -495,8 +495,8 @@ def auth_user_pass(proxy_string: typing.Optional[str],
                     'is: "username:password@hostname:port". If using a proxy '
                     'server without auth, the format is: "hostname:port".'
                 )
-            if browser_name != sbconstants.Browser.GOOGLE_CHROME and (
-                    browser_name != sbconstants.Browser.EDGE
+            if browser_name != sb_constants.Browser.GOOGLE_CHROME and (
+                    browser_name != sb_constants.Browser.EDGE
             ):
                 raise Exception(
                     "Chrome or Edge is required when using a proxy server "

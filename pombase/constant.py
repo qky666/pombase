@@ -6,24 +6,24 @@ import src.testproject.enums as tp_enums
 import src.testproject.enums.report_type as report_type
 
 import pombase.util as util
-import pombase.webdriver as tp_webdriver
+import pombase.webdriver as pb_webdriver
 
 
-TP_DRIVER_CLASS: typing.MutableMapping[str, typing.Type[typing.Union[tp_webdriver.Chrome,
-                                                                     tp_webdriver.Edge,
-                                                                     tp_webdriver.Firefox,
-                                                                     tp_webdriver.Ie,
-                                                                     tp_webdriver.Remote,
-                                                                     tp_webdriver.Safari,
-                                                                     tp_webdriver.Generic, ]]] = \
+TP_DRIVER_CLASS: typing.MutableMapping[str, typing.Type[typing.Union[pb_webdriver.Chrome,
+                                                                     pb_webdriver.Edge,
+                                                                     pb_webdriver.Firefox,
+                                                                     pb_webdriver.Ie,
+                                                                     pb_webdriver.Remote,
+                                                                     pb_webdriver.Safari,
+                                                                     pb_webdriver.Generic,]]] = \
     util.CaseInsensitiveDict(
-        chrome=tp_webdriver.Chrome,
-        edge=tp_webdriver.Edge,
-        firefox=tp_webdriver.Firefox,
-        ie=tp_webdriver.Ie,
-        remote=tp_webdriver.Remote,
-        safari=tp_webdriver.Safari,
-        generic=tp_webdriver.Generic,
+        chrome=pb_webdriver.Chrome,
+        edge=pb_webdriver.Edge,
+        firefox=pb_webdriver.Firefox,
+        ie=pb_webdriver.Ie,
+        remote=pb_webdriver.Remote,
+        safari=pb_webdriver.Safari,
+        generic=pb_webdriver.Generic,
     )
 
 TP_SLEEP_TIMING_TYPE: typing.MutableMapping[str, tp_enums.SleepTimingType] = util.CaseInsensitiveDict(

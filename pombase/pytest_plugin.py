@@ -1,8 +1,8 @@
 from __future__ import annotations
 import typing
 import pytest
-import _pytest.config as pytest_config
-import _pytest.fixtures as pytest_fixtures
+import _pytest.config as pt_config
+import _pytest.fixtures as pt_fixtures
 import os
 import enum
 import seleniumbase.config as sb_config
@@ -114,11 +114,11 @@ class PytestVar(enum.Enum):
         v = os.environ.get(self.env_var_name, None)
         return v if v not in constants.ALMOST_NONE else None
 
-    def ini_value(self, config: pytest_config.Config) -> typing.Union[str, list, list[str], bool]:
+    def ini_value(self, config: pt_config.Config) -> typing.Union[str, list, list[str], bool]:
         v = config.getini(self.ini_name)
         return v if v not in constants.ALMOST_NONE else None
 
-    def addini(self, parser: pytest_config.argparsing.Parser) -> None:
+    def addini(self, parser: pt_config.argparsing.Parser) -> None:
         kwargs = {}
         env_var_value = self.env_value()
         default = env_var_value if env_var_value is not None else self.default_value
@@ -135,18 +135,18 @@ class PytestVar(enum.Enum):
         parser.addini(self.ini_name, help=self.help_text, type=self.var_type, **kwargs)
 
 
-def pytest_addoption(parser: pytest_config.argparsing.Parser) -> None:
+def pytest_addoption(parser: pt_config.argparsing.Parser) -> None:
     for pytest_var in PytestVar:
         pytest_var: PytestVar
         pytest_var.addini(parser)
 
 
-def pytest_configure(config: pytest_config.Config) -> None:
+def pytest_configure(config: pt_config.Config) -> None:
     pb_config.Config().pytest_config = config
 
 
 @pytest.fixture()
-def pb(request: pytest_fixtures.FixtureRequest):
+def pb(request: pt_fixtures.FixtureRequest):
     """PomBase as a pytest fixture.
     Usage example: "def test_one(pb):"
     You may need to use this for tests that use other pytest fixtures."""
