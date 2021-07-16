@@ -340,7 +340,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                 report_path=self.pbconfig.tp_report_path,
                 **driver_kwargs,
             )
-            self.handle_new_driver(new_driver, browser_name, switch_to)
+            self._handle_new_driver(new_driver, browser_name, switch_to)
             return new_driver
         else:
             return super().get_new_driver(browser,
@@ -377,7 +377,7 @@ class PomBaseCase(seleniumbase.BaseCase):
                                           d_height,
                                           d_p_r, )
 
-    def handle_new_driver(self, new_driver, browser_name, switch_to):
+    def _handle_new_driver(self, new_driver: webdriver.WebDriver, browser_name: str, switch_to: bool) -> None:
         self._drivers_list.append(new_driver)
         self._BaseCase__driver_browser_map[new_driver] = browser_name
         if switch_to:

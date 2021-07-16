@@ -8,14 +8,16 @@ import src.testproject.enums.report_type as report_type
 import pombase.util as util
 import pombase.webdriver as pb_webdriver
 
+PbWebDriver = typing.Type[typing.Union[pb_webdriver.Chrome,
+                                       pb_webdriver.Edge,
+                                       pb_webdriver.Firefox,
+                                       pb_webdriver.Ie,
+                                       pb_webdriver.Remote,
+                                       pb_webdriver.Safari,
+                                       pb_webdriver.Generic, ]]
 
-TP_DRIVER_CLASS: typing.MutableMapping[str, typing.Type[typing.Union[pb_webdriver.Chrome,
-                                                                     pb_webdriver.Edge,
-                                                                     pb_webdriver.Firefox,
-                                                                     pb_webdriver.Ie,
-                                                                     pb_webdriver.Remote,
-                                                                     pb_webdriver.Safari,
-                                                                     pb_webdriver.Generic,]]] = \
+
+TP_DRIVER_CLASS: typing.MutableMapping[str, PbWebDriver] = \
     util.CaseInsensitiveDict(
         chrome=pb_webdriver.Chrome,
         edge=pb_webdriver.Edge,

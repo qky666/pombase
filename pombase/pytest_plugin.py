@@ -16,6 +16,8 @@ import pombase.config as pb_config
 import pombase.pom_base_case as pom_base_case
 import pombase.util as util
 
+PytestVariableType = typing.Literal['string', 'pathlist', 'args', 'linelist', 'bool']
+
 
 @enum.unique
 class PytestVar(enum.Enum):
@@ -85,10 +87,9 @@ class PytestVar(enum.Enum):
         None,
     )
 
-    def __init__(self,
-                 var_name: str,
+    def __init__(self, var_name: str,
                  help_text: str,
-                 var_type: typing.Literal['string', 'pathlist', 'args', 'linelist', 'bool'],
+                 var_type: PytestVariableType,
                  default_value: typing.Optional[str]):
         self.var_name = var_name
         self.help_text = help_text

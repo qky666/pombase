@@ -6,6 +6,7 @@ import time
 import unicodedata
 import dateutil.parser as dateutil_parser
 
+import pombase.types as types
 
 T = typing.TypeVar('T')
 
@@ -13,8 +14,8 @@ T = typing.TypeVar('T')
 def wait_until(f: typing.Callable[..., T],
                args: list = None,
                kwargs: dict = None,
-               timeout: typing.Union[int, float] = 10,
-               step: typing.Union[int, float] = 0.5,
+               timeout: types.Number = 10,
+               step: types.Number = 0.5,
                expected: typing.Any = True,
                equals: bool = True,
                raise_error: str = None, ) -> (bool, T):
@@ -228,7 +229,7 @@ def expand_replacing_spaces_and_underscores(texts: typing.Iterable[str]) -> typi
     return expanded
 
 
-def first_not_none(*args) -> typing.Any:
+def first_not_none(*args: T) -> typing.Optional[T]:
     for i in args:
         if i is not None:
             return i

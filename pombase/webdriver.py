@@ -1,5 +1,4 @@
 from __future__ import annotations
-import typing
 import selenium.common.exceptions as selenium_exceptions
 # noinspection PyPackageRequirements
 import src.testproject.sdk.drivers.webdriver as tp_webdriver
@@ -8,13 +7,11 @@ import src.testproject.classes as tp_classes
 # noinspection PyPackageRequirements
 import src.testproject.enums as tp_enums
 
-
-# Type alias
-Number = typing.Union[int, float]
+import pombase.types as types
 
 
 class Chrome(tp_webdriver.Chrome):
-    def set_script_timeout(self, time_to_wait: Number) -> None:
+    def set_script_timeout(self, time_to_wait: types.Number) -> None:
         step_settings = tp_classes.StepSettings(
             timeout=int(time_to_wait),
             always_pass=True,
