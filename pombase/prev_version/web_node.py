@@ -863,7 +863,8 @@ class WebNode(anytree.node.anynode.AnyNode):
         text = element.text
         element_type = element.get_attribute("type")
         if pombase.util.caseless_equal(tag_name, "input"):
-            if isinstance(element_type, str) and pombase.util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
+            if isinstance(element_type, str) \
+                    and pombase.util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
                 return element.is_selected()
             elif text in [None, ""]:
                 return element.get_attribute("value")

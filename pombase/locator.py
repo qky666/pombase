@@ -154,7 +154,7 @@ def as_xpath(selector: str, by: str = None) -> str:
 
 def compound(locator: PseudoLocator, *args: PseudoLocator) -> Locator:
     locators = [locator] + list(args)
-    locators: typing.List[Locator] = [get_locator(loc) for loc in locators]
+    locators: list[Locator] = [get_locator(loc) for loc in locators]
     return functools.reduce(lambda l1, l2: l1.append(l2), locators)
 
 

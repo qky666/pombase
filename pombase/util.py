@@ -45,10 +45,22 @@ def wait_until(f: typing.Callable[..., T],
     assert timeout >= 0, f"timeout should be >= 0. timeout = {timeout}"
     assert step > 0, f"step should be > 0. step = {step}"
 
-    value = f(*args, **kwargs)
+    if equals is True:
+        default_value = None if expected is not None else False
+    else:
+        default_value = expected
+
     current = time.time()
     start = current
     stop = start + timeout
+
+    value = default_value
+    # noinspection PyBroadException
+    try:
+        value = f(*args, **kwargs)
+    except Exception:
+        pass
+
     keep_looping = True
     while keep_looping:
         if (value == expected) is equals:
@@ -58,7 +70,11 @@ def wait_until(f: typing.Callable[..., T],
             time.sleep(current + step - after)
         current = time.time()
         if current <= stop:
-            value = f(*args, **kwargs)
+            # noinspection PyBroadException
+            try:
+                value = f(*args, **kwargs)
+            except Exception:
+                pass
         else:
             keep_looping = False
     else:
@@ -222,7 +238,7 @@ def caseless_text_in_texts(text: str, texts: typing.Iterable[str]) -> bool:
     return normalized_text in normalized_set
 
 
-def expand_replacing_spaces_and_underscores(texts: typing.Iterable[str]) -> typing.Set[str]:
+def expand_replacing_spaces_and_underscores(texts: typing.Iterable[str]) -> set[str]:
     expanded = set(texts)
     expanded = expanded.union({t.replace("_", " ") for t in texts})
     expanded = expanded.union({t.replace(" ", "_") for t in texts})
