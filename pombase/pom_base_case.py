@@ -11,6 +11,8 @@ import seleniumbase.fixtures.constants as sb_constants
 import seleniumbase.fixtures.page_utils as page_utils
 import selenium.webdriver.common.desired_capabilities as desired_capabilities
 import selenium.webdriver.ie.options as selenium_ie_options
+import selenium.webdriver.support.select as selenium_select
+import selenium.webdriver.remote.webelement as webelement
 from selenium.webdriver.common.by import By
 import msedge.selenium_tools as edge_tools
 # noinspection PyPackageRequirements
@@ -20,13 +22,12 @@ import src.testproject.enums as tp_enums
 # noinspection PyPackageRequirements
 import src.testproject.enums.environmentvariable as environmentvariable
 
-
+import pombase.web_node
 import pombase.webdriver as pb_webdriver
 import pombase.config as pb_config
 import pombase.constant as constants
 import pombase.util as util
 import pombase.web_node as web_node
-import pombase.locator as locator
 import pombase.types as types
 
 
@@ -67,8 +68,8 @@ def recalculate_selector_by(selector: typing.Union[str, web_node.WebNode], by: s
     if isinstance(selector, web_node.WebNode):
         return selector.locator.selector, selector.locator.by
     elif by is None:
-        return selector, locator.infer_by_from_selector(selector)
-    elif by == By.CSS_SELECTOR and locator.infer_by_from_selector(selector) == By.XPATH:
+        return selector, pombase.web_node.infer_by_from_selector(selector)
+    elif by == By.CSS_SELECTOR and pombase.web_node.infer_by_from_selector(selector) == By.XPATH:
         return selector, By.XPATH
     else:
         return selector, by
@@ -527,9 +528,9 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 step_settings.screenshot_condition = previous_settings.screenshot_condition
             new_driver.command_executor.settings = step_settings
 
-    ######################
-    # New utility methods
-    ######################
+    ##############
+    # New methods
+    ##############
 
     def count(self, selector: typing.Union[str, web_node.WebNode], by: str = None) -> int:
         node = web_node.node_from(selector, by)
@@ -551,6 +552,33 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             return True
         else:
             return False
+
+    def get_tag_name(self,
+                     selector: typing.Union[str, web_node.WebNode],
+                     by: str = None,
+                     timeout: typing.Union[int, float] = None) -> str:
+        selector, by = recalculate_selector_by(selector, by)
+        element = self.get_element(selector, by, timeout)
+        return element.tag_name
+
+    def get_selected_options(self,
+                             selector: typing.Union[str, web_node.WebNode],
+                             by: str = None,
+                             timeout: typing.Union[int, float] = None, ) -> list[str]:
+        selector, by = recalculate_selector_by(selector, by)
+        element = self.find_element(selector, by, timeout)
+        select = selenium_select.Select(element)
+        selected: list[webelement.WebElement] = select.all_selected_options
+        return [item.text for item in selected]
+
+    def deselect_all_options(self,
+                             selector: typing.Union[str, web_node.WebNode],
+                             by: str = None,
+                             timeout: typing.Union[int, float] = None, ) -> None:
+        selector, by = recalculate_selector_by(selector, by)
+        element = self.find_element(selector, by, timeout)
+        select = selenium_select.Select(element)
+        select.deselect_all()
 
     #######################
     # SeleniumBase actions
@@ -782,6 +810,11 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
     def select_option_by_value(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
         dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_value(dropdown_selector, option, dropdown_by, timeout)
+
+    @overrides.overrides
+    def switch_to_frame(self, frame, timeout=None):
+        frame, _ = recalculate_selector_by(frame)
+        super().switch_to_frame(frame, timeout)
 
     @overrides.overrides
     def bring_to_front(self, selector, by=By.CSS_SELECTOR):

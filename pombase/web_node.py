@@ -1,35 +1,124 @@
 from __future__ import annotations
+
+import collections
+import functools
 import typing
 import anytree
 import itertools
 import logging
 import selenium.webdriver.remote.webelement as webelement
+from cssselect import xpath as css_xpath
+from selenium.webdriver.common import by as selenium_by
 
-import pombase.locator as pb_locator
 import pombase.pom_base_case as pom_base_case
 import pombase.types as types
 import pombase.util as util
 
 NodeCount = typing.Union[None, int, range, itertools.count, typing.Iterable[int]]
+SelectorByTuple = collections.namedtuple("SelectorByTuple", "selector by")
 
 
-def node_from(selector: typing.Union[str, WebNode], by: str = None) -> WebNode:
-    if isinstance(selector, WebNode):
-        return selector
-    else:
-        return WebNode(pb_locator.Locator(selector, by))
+class Locator:
+    translator = css_xpath.GenericTranslator()
+
+    def __init__(self, selector: str, by: str = None, index: int = None) -> None:
+        assert len(selector) > 0, \
+            f"Validation error. Locator.selector should not be empty: selector={selector}"
+        self._selector = selector
+        self._by = by
+        self._index = index
+
+    def __repr__(self):
+        return f"Locator(_selector={self._selector}, _by={self._by}, _index={self._index})"
+
+    def copy(self, selector: str = None, by: str = None, index: int = None) -> Locator:
+        return Locator(
+            selector=util.first_not_none(selector, self._selector),
+            by=util.first_not_none(by, self._by),
+            index=util.first_not_none(index, self._index),
+        )
+
+    @property
+    def selector(self) -> str:
+        if self._index is not None:
+            xpath = as_xpath(self._selector, self._by)
+            return f"({xpath})[{self._index + 1}]"
+        return self._selector
+
+    @property
+    def by(self) -> str:
+        if self._index is not None:
+            return selenium_by.By.XPATH
+        elif self._by is not None:
+            return self._by
+        else:
+            return infer_by_from_selector(self._selector)
+
+    @property
+    def index(self) -> typing.Optional[int]:
+        return self._index
+
+    def as_css_selector(self) -> typing.Optional[str]:
+        if self.index is not None:
+            return None
+        else:
+            return as_css(self.selector, self.by)
+
+    def as_xpath_selector(self) -> str:
+        if self.index is not None:
+            return self.selector
+        else:
+            return as_xpath(self.selector, self.by)
+
+    def as_selector_by_tuple(self) -> SelectorByTuple:
+        return SelectorByTuple(self.selector, self.by)
+
+    def __eq__(self, other: typing.Any) -> bool:
+        try:
+            other = get_locator(other)
+        except TypeError:
+            return False
+        except AssertionError:
+            return False
+        if other.selector == self.selector and other.by == self.by:
+            return True
+        else:
+            return False
+
+    def append(self, locator: Locator) -> Locator:
+        self_as_css = self.as_css_selector()
+        locator_as_css = locator.as_css_selector()
+        if self_as_css is not None and locator_as_css is not None:
+            return Locator(f"{self_as_css} {locator_as_css}")
+        else:
+            self_as_xpath = self.as_xpath_selector()
+            locator_as_xpath = locator.as_xpath_selector()
+            xpath = self_as_xpath
+            if locator_as_xpath.startswith("/"):
+                # Reset xpath
+                xpath = ""
+            else:
+                if locator_as_xpath.startswith("("):
+                    # Put "(" in the beginning
+                    xpath = f"({xpath}"
+                    locator_as_xpath = locator_as_xpath[1:]
+                if locator_as_xpath.startswith("."):
+                    # Remove "."
+                    locator_as_xpath = locator_as_xpath[1:]
+            xpath = f"{xpath}{locator_as_xpath}"
+            return Locator(xpath)
 
 
 class WebNode(anytree.node.anynode.AnyNode):
     separator = "__"
 
     def __init__(self,
-                 locator: pb_locator.Locator = None,
+                 locator: Locator = None,
                  *,
                  parent: WebNode = None,
                  children: typing.Iterable[WebNode] = None,
                  name: str = None,
-                 override_parent: pb_locator.PseudoLocator = None,
+                 override_parent: PseudoLocator = None,
                  valid_count: NodeCount = range(2),
                  ignore_invisible: bool = True,
                  pbc: pom_base_case.PomBaseCase = None,
@@ -38,7 +127,7 @@ class WebNode(anytree.node.anynode.AnyNode):
         if children is None:
             children = []
 
-        override_parent = pb_locator.get_locator(override_parent) if override_parent is not None else None
+        override_parent = get_locator(override_parent) if override_parent is not None else None
         if override_parent is not None and locator is None:
             locator = override_parent
             override_parent = None
@@ -49,7 +138,7 @@ class WebNode(anytree.node.anynode.AnyNode):
             valid_count = [valid_count]
 
         # locator and valid_count are related
-        if self.locator is not None and self.locator.index is not None:
+        if locator is not None and locator.index is not None:
             new_valid_count = []
             if 0 in valid_count:
                 new_valid_count.append(0)
@@ -74,12 +163,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         )
 
         # This is redundant, but we want to help PyCharm
-        locator: typing.Optional[pb_locator.Locator]
+        locator: typing.Optional[Locator]
         self.locator = locator
         # self.parent: WebNode = parent
         # self.children: typing.Iterable[WebNode] = children
         self.name = name
-        override_parent: typing.Optional[pb_locator.Locator]
+        override_parent: typing.Optional[Locator]
         self.override_parent = override_parent
         valid_count: typing.Iterable[int]
         self.valid_count = valid_count
@@ -106,18 +195,11 @@ class WebNode(anytree.node.anynode.AnyNode):
     # Computed properties
     ######################
     @property
-    def max_count(self) -> typing.Optional[int]:
+    def max_valid_count(self) -> typing.Optional[int]:
         if type(self.valid_count) == itertools.count:
             return None
         else:
             return max(self.valid_count)
-
-    @property
-    def is_multiple(self) -> bool:
-        if self.max_count is None or self.max_count > 1:
-            return True
-        else:
-            return False
 
     @property
     def relevant_properties(self) -> typing.Dict[str]:
@@ -130,11 +212,6 @@ class WebNode(anytree.node.anynode.AnyNode):
             pbc=self.pbc,
             **self._kwargs,
         )
-
-    @property
-    def full_name(self) -> str:
-        names = [node.name for node in self.path if node.name is not None]
-        return self.separator.join(names)
 
     @property
     def pbc(self) -> typing.Optional[pom_base_case.PomBaseCase]:
@@ -150,6 +227,28 @@ class WebNode(anytree.node.anynode.AnyNode):
     ########
     def __repr__(self):
         return self.full_name
+
+    ############
+    # Node name
+    ############
+    @property
+    def full_name(self) -> str:
+        names = [node.name for node in self.path if node.name is not None]
+        return self.separator.join(names)
+
+    def relative_name_of_descendant(self, descendant: WebNode) -> str:
+        if self not in descendant.path:
+            return descendant.full_name
+        rel_name = descendant.full_name
+        nearest_named = self.find_nearest_named_ancestor_or_self()
+        if rel_name.startswith(nearest_named.full_name):
+            rel_name = rel_name[len(nearest_named.full_name):]
+            while rel_name.startswith(self.separator):
+                rel_name = rel_name[len(self.separator):]
+        return rel_name
+
+    def relative_name_from_ascendant(self, ascendant: WebNode) -> str:
+        return ascendant.relative_name_of_descendant(self)
 
     ##############
     # Validations
@@ -303,23 +402,42 @@ class WebNode(anytree.node.anynode.AnyNode):
     #########################
     # Valid count & Multiple
     #########################
+    @property
+    def is_multiple(self) -> bool:
+        if self.max_valid_count is None or self.max_valid_count > 1:
+            return True
+        else:
+            return False
+
     def get_multiple_nodes(self) -> typing.Optional[list[WebNode]]:
         if self.is_multiple is False:
             return None
+        if self.name is not None:
+            # Remove previous nodes (if any) to avoid duplicated names
+            i = 0
+            prev_nodes = anytree.findall_by_attr(self.parent, f"{self.name}_{i}", maxlevel=2)
+            while len(prev_nodes) > 0:
+                for prev_node in prev_nodes:
+                    prev_node: WebNode
+                    prev_node.parent = None
+                i = i + 1
+                prev_nodes = anytree.findall_by_attr(self.parent, f"{self.name}_{i}", maxlevel=2)
+        # Create new nodes
         nodes = []
         for i in range(self.count()):
             new_node = self.copy(recursive=True)
             new_node.locator = self.locator.copy(index=i)
+            new_node.valid_count = range(2)
             if new_node.name is not None:
                 new_node.name = f"{new_node.name}_{i}"
             new_node.parent = self.parent
             nodes.append(new_node)
         return nodes
 
-    def _has_valid_count(self, force_valid_count_not_zero: bool = False) -> bool:
+    def _has_valid_count(self, force_count_not_zero: bool = False) -> bool:
         num_elements = self.count()
         if num_elements in self.valid_count and \
-                ((force_valid_count_not_zero is False) or (num_elements > 0)):
+                ((force_count_not_zero is False) or (num_elements > 0)):
             return True
         else:
             return False
@@ -328,17 +446,158 @@ class WebNode(anytree.node.anynode.AnyNode):
         return self._has_valid_count()
 
     def wait_until_valid_count(self,
-                               timeout: typing.Union[int, float] = None,
+                               timeout: types.Number = None,
                                raise_error: bool = True,
-                               force_valid_count_not_zero: bool = True, ) -> bool:
+                               force_count_not_zero: bool = True, ) -> bool:
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode had not valid count after {timeout} second{plural}: {self}" \
             if raise_error is True else None
         success, _ = util.wait_until(self._has_valid_count,
-                                     args=[force_valid_count_not_zero, ],
+                                     args=[force_count_not_zero, ],
                                      timeout=timeout,
                                      raise_error=raise_error)
         return success
+
+    #########
+    # Loaded
+    #########
+    def wait_until_loaded(self,
+                          timeout: types.Number = None,
+                          raise_error: bool = True,
+                          force_count_not_zero: bool = True, ) -> bool:
+        # Handle frames
+        element_in_iframe = self.is_element_in_an_iframe()
+        if element_in_iframe is True:
+            for node in self.path[:-1]:
+                node: WebNode
+                if node.is_iframe() is True:
+                    node.switch_to_frame(timeout)
+
+        valid_count = self.wait_until_valid_count(timeout, raise_error, force_count_not_zero)
+        if valid_count is False:
+            if element_in_iframe is True:
+                self.switch_to_default_content()
+            return False
+
+        children: typing.List[WebNode] = []
+        if self.is_multiple:
+            multiples = self.get_multiple_nodes()
+            for node in multiples:
+                node.wait_until_loaded(timeout, raise_error)
+                children = children + node.children
+        else:
+            children = self.children
+        for node in children:
+            loaded = node.wait_until_loaded(timeout, raise_error, force_count_not_zero=False)
+            if loaded is False:
+                if element_in_iframe is True:
+                    self.switch_to_default_content()
+                return False
+        else:
+            if element_in_iframe is True:
+                self.switch_to_default_content()
+            return True
+
+    ################
+    # get/set value
+    ################
+    def _get_field_value(self, timeout: types.Number = None) -> typing.Any:
+        for node in self.path:
+            node: WebNode
+            rel_name = node.relative_name_of_descendant(self)
+            method = getattr(node, f"get_{rel_name}_field_value", None)
+            if method is not None:
+                return method(timeout)
+        else:
+            return self.get_field_value()
+
+    def _set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
+        if value is None:
+            return
+        for node in self.path:
+            node: WebNode
+            rel_name = node.relative_name_of_descendant(self)
+            method = getattr(node, f"set_{rel_name}_field_value", None)
+            if method is not None:
+                method(value, timeout)
+                return
+        else:
+            self.set_field_value(value)
+
+    @property
+    def value(self) -> typing.Any:
+        return self._get_field_value()
+
+    @value.setter
+    def value(self, value: typing.Any) -> None:
+        self._set_field_value(value)
+
+    def get_field_value(self, timeout: types.Number = None) -> typing.Any:
+        tag_name = self.get_tag_name(timeout)
+        text = self.get_text(timeout)
+        if util.caseless_equal(tag_name, "input"):
+            element_type = self.get_attribute("type", timeout, hard_fail=False)
+            if isinstance(element_type, str) \
+                    and util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
+                return self.is_selected()
+            elif text in [None, ""]:
+                return self.get_attribute("value", timeout, hard_fail=False)
+        elif util.caseless_equal(tag_name, "select"):
+            return self.get_selected_options()
+        else:
+            return text
+
+    def set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
+        tag_name = self.get_tag_name(timeout)
+        element_type = self.get_attribute("type", timeout, hard_fail=False)
+        if util.caseless_equal(tag_name, "input"):
+            if isinstance(element_type, str) and util.caseless_equal(element_type, "text"):
+                self.type(str(value), timeout, retry=True)
+            elif isinstance(element_type, str) and util.caseless_equal(element_type, "checkbox"):
+                if value is True or (isinstance(value, str)) and util.caseless_equal(value, "true"):
+                    self.select_if_unselected()
+                elif value is False or (isinstance(value, str) and util.caseless_equal(value, "false")):
+                    self.unselect_if_selected()
+                elif isinstance(value, str) and util.caseless_equal(value, "toggle"):
+                    self.click()
+                else:
+                    raise Exception(
+                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                    )
+            elif isinstance(element_type, str) and util.caseless_equal(element_type, "radio"):
+                if value is True or (isinstance(value, str) and util.caseless_equal(value, "true")):
+                    self.select_if_unselected()
+                else:
+                    raise Exception(
+                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                    )
+            elif isinstance(element_type, str) and util.caseless_equal(element_type, "file"):
+                self.choose_file(value)
+            else:
+                raise Exception(
+                    f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                )
+        elif util.caseless_equal(tag_name, "select"):
+            if isinstance(value, str):
+                self.select_option_by_text(value, timeout)
+            elif isinstance(value, int):
+                self.select_option_by_index(value, timeout)
+            elif isinstance(value, list):
+                if len(value) == 0:
+                    self.deselect_all_options(timeout)
+                else:
+                    for item in value:
+                        if isinstance(item, str):
+                            self.select_option_by_text(item, timeout)
+                        elif isinstance(item, int):
+                            self.select_option_by_index(item, timeout)
+                        else:
+                            raise Exception(
+                                f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. "
+                                f"Node: {self}",
+                            )
+        else:
+            self.type(str(value), timeout)
 
     #######################
     # PomBaseCase methods
@@ -347,14 +606,24 @@ class WebNode(anytree.node.anynode.AnyNode):
         return self.pbc.count(selector=self)
 
     def is_iframe(self, timeout: types.Number = None) -> bool:
-        return self.pbc.is_iframe(self, timeout=timeout)
+        return self.pbc.is_iframe(selector=self, timeout=timeout)
 
     def switch_to_default_content(self) -> None:
         self.pbc.switch_to_default_content()
 
+    def get_tag_name(self, timeout: types.Number = None) -> str:
+        return self.pbc.get_tag_name(selector=self, timeout=timeout)
+
+    def get_selected_options(self, timeout: types.Number = None) -> list[str]:
+        return self.pbc.get_selected_options(selector=self, timeout=timeout)
+
+    def deselect_all_options(self, timeout: types.Number = None) -> None:
+        return self.pbc.deselect_all_options(selector=self, timeout=timeout)
+
     #######################
     # SeleniumBase methods
     #######################
+    # TODO: Document these methods
     def click(self, timeout: types.Number = None, delay: int = 0) -> None:
         self.pbc.click(selector=self, timeout=timeout, delay=delay)
 
@@ -499,6 +768,9 @@ class WebNode(anytree.node.anynode.AnyNode):
     def select_option_by_value(self, option: typing.Union[str, int], timeout: types.Number = None) -> None:
         self.pbc.select_option_by_value(dropdown_selector=self, option=option, timeout=timeout)
 
+    def switch_to_frame(self, timeout: types.Number = None) -> None:
+        self.pbc.switch_to_frame(frame=self, timeout=timeout)
+
     def bring_to_front(self) -> None:
         self.pbc.bring_to_front(selector=self)
 
@@ -623,3 +895,90 @@ class WebNode(anytree.node.anynode.AnyNode):
 
     def deferred_assert_text(self, text: str, timeout: types.Number = None) -> bool:
         return self.pbc.deferred_assert_text(text=text, selector=self, timeout=timeout)
+
+
+def node_from(selector: typing.Union[str, WebNode], by: str = None) -> WebNode:
+    if isinstance(selector, WebNode):
+        return selector
+    else:
+        return WebNode(Locator(selector, by))
+
+
+def as_css(selector: str, by: str = None) -> typing.Optional[str]:
+    if by is None:
+        by = infer_by_from_selector(selector)
+    if by == selenium_by.By.ID:
+        return f"#{selector}"
+    elif by == selenium_by.By.XPATH:
+        return None
+    elif by == selenium_by.By.LINK_TEXT:
+        return None
+    elif by == selenium_by.By.PARTIAL_LINK_TEXT:
+        return None
+    elif by == selenium_by.By.NAME:
+        return f"[name='{selector}']"
+    elif by == selenium_by.By.TAG_NAME:
+        return selector
+    elif by == selenium_by.By.CLASS_NAME:
+        return f".{selector}"
+    elif by == selenium_by.By.CSS_SELECTOR:
+        return selector
+    else:
+        assert False, f"Unknown 'by': {by}"
+
+
+def as_xpath(selector: str, by: str = None) -> str:
+    if by is None:
+        by = infer_by_from_selector(selector)
+    if by == selenium_by.By.ID:
+        return f".//*[@id='{selector}']"
+    elif by == selenium_by.By.XPATH:
+        return selector
+    elif by == selenium_by.By.LINK_TEXT:
+        return f".//a[normalize-space(.)='{selector}']"
+    elif by == selenium_by.By.PARTIAL_LINK_TEXT:
+        return f".//a[contains(normalize-space(.),'{selector}')]"
+    elif by == selenium_by.By.NAME:
+        return f".//*[@name='{selector}']"
+    elif by == selenium_by.By.TAG_NAME:
+        return f".//{selector}"
+    elif by == selenium_by.By.CLASS_NAME:
+        return f".//*[contains(concat(' ',normalize-space(@class),' '),' {selector} ')]"
+    elif by == selenium_by.By.CSS_SELECTOR:
+        return Locator.translator.css_to_xpath(selector, ".//")
+    else:
+        assert False, f"Unknown 'by': {by}"
+
+
+def compound(locator: PseudoLocator, *args: PseudoLocator) -> Locator:
+    locators = [locator] + list(args)
+    locators: list[Locator] = [get_locator(loc) for loc in locators]
+    return functools.reduce(lambda l1, l2: l1.append(l2), locators)
+
+
+def infer_by_from_selector(selector: str) -> str:
+    if selector == "." \
+            or selector.startswith("./") \
+            or selector.startswith("/") \
+            or selector.startswith("("):
+        return selenium_by.By.XPATH
+    else:
+        return selenium_by.By.CSS_SELECTOR
+
+
+def get_locator(obj: PseudoLocator) -> Locator:
+    if isinstance(obj, Locator):
+        return obj
+    elif isinstance(obj, WebNode):
+        return obj.locator
+    elif isinstance(obj, str):
+        return Locator(obj)
+    elif isinstance(obj, dict):
+        return Locator(**obj)
+    elif isinstance(obj, typing.Iterable):
+        return Locator(*obj)
+    else:
+        assert False, f"Can not get object as a Locator: {obj}"
+
+
+PseudoLocator = typing.Union[Locator, str, dict, typing.Iterable, WebNode]
