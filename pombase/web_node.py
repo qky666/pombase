@@ -6,6 +6,7 @@ import typing
 import anytree
 import itertools
 import logging
+import overrides
 import selenium.webdriver.remote.webelement as webelement
 from cssselect import xpath as css_xpath
 from selenium.webdriver.common import by as selenium_by
@@ -109,9 +110,10 @@ class Locator:
             return Locator(xpath)
 
 
-class WebNode(anytree.node.anynode.AnyNode):
+class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     separator = "__"
 
+    @overrides.overrides
     def __init__(self,
                  locator: Locator = None,
                  *,
@@ -225,6 +227,7 @@ class WebNode(anytree.node.anynode.AnyNode):
     ########
     # Print
     ########
+    @overrides.overrides
     def __repr__(self):
         return self.full_name
 
@@ -253,6 +256,7 @@ class WebNode(anytree.node.anynode.AnyNode):
     ##############
     # Validations
     ##############
+    @overrides.overrides
     def _post_attach(self, parent: WebNode) -> None:
         super()._post_attach(parent)
         self.validate()
@@ -501,7 +505,14 @@ class WebNode(anytree.node.anynode.AnyNode):
     ################
     # get/set value
     ################
-    def _get_field_value(self, timeout: types.Number = None) -> typing.Any:
+    def override_get_field_value(self, timeout: types.Number = None) -> typing.Any:
+        return self.default_get_field_value(timeout)
+
+    def override_set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
+        self.default_set_field_value(value, timeout)
+
+    @overrides.final
+    def get_field_value(self, timeout: types.Number = None) -> typing.Any:
         for node in self.path:
             node: WebNode
             rel_name = node.relative_name_of_descendant(self)
@@ -509,9 +520,10 @@ class WebNode(anytree.node.anynode.AnyNode):
             if method is not None:
                 return method(timeout)
         else:
-            return self.get_field_value()
+            return self.override_get_field_value(timeout)
 
-    def _set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
+    @overrides.final
+    def set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
         if value is None:
             return
         for node in self.path:
@@ -522,17 +534,9 @@ class WebNode(anytree.node.anynode.AnyNode):
                 method(value, timeout)
                 return
         else:
-            self.set_field_value(value)
+            self.override_set_field_value(value, timeout)
 
-    @property
-    def value(self) -> typing.Any:
-        return self._get_field_value()
-
-    @value.setter
-    def value(self, value: typing.Any) -> None:
-        self._set_field_value(value)
-
-    def get_field_value(self, timeout: types.Number = None) -> typing.Any:
+    def default_get_field_value(self, timeout: types.Number = None) -> typing.Any:
         tag_name = self.get_tag_name(timeout)
         text = self.get_text(timeout)
         if util.caseless_equal(tag_name, "input"):
@@ -547,12 +551,12 @@ class WebNode(anytree.node.anynode.AnyNode):
         else:
             return text
 
-    def set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
+    def default_set_field_value(self, value: typing.Any, timeout: types.Number = None) -> None:
         tag_name = self.get_tag_name(timeout)
         element_type = self.get_attribute("type", timeout, hard_fail=False)
         if util.caseless_equal(tag_name, "input"):
             if isinstance(element_type, str) and util.caseless_equal(element_type, "text"):
-                self.type(str(value), timeout, retry=True)
+                self.update_text(str(value), timeout, retry=True)
             elif isinstance(element_type, str) and util.caseless_equal(element_type, "checkbox"):
                 if value is True or (isinstance(value, str)) and util.caseless_equal(value, "true"):
                     self.select_if_unselected()
@@ -597,7 +601,7 @@ class WebNode(anytree.node.anynode.AnyNode):
                                 f"Node: {self}",
                             )
         else:
-            self.type(str(value), timeout)
+            self.update_text(str(value), timeout)
 
     #######################
     # PomBaseCase methods
@@ -639,8 +643,8 @@ class WebNode(anytree.node.anynode.AnyNode):
     def add_text(self, text: str, timeout: types.Number = None) -> None:
         self.pbc.add_text(selector=self, text=text, timeout=timeout)
 
-    def type(self, text: str, timeout: types.Number = None, retry: bool = False) -> None:
-        self.pbc.type(selector=self, text=text, timeout=timeout, retry=retry)
+    def update_text(self, text: str, timeout: types.Number = None, retry: bool = False) -> None:
+        self.pbc.update_text(selector=self, text=text, timeout=timeout, retry=retry)
 
     def submit(self) -> None:
         self.pbc.submit(selector=self)
@@ -846,37 +850,39 @@ class WebNode(anytree.node.anynode.AnyNode):
     def post_message_and_highlight(self, message) -> None:
         self.pbc.post_message_and_highlight(message, self)
 
-    def get_element(self, timeout: types.Number = None) -> webelement.WebElement:
-        return self.pbc.get_element(selector=self, timeout=timeout)
+    def wait_for_element_present(self, timeout: types.Number = None) -> webelement.WebElement:
+        return self.pbc.wait_for_element_present(selector=self, timeout=timeout)
 
     def assert_element_present(self, timeout: types.Number = None) -> bool:
         return self.pbc.assert_element_present(selector=self, timeout=timeout)
 
-    def find_element(self, timeout: types.Number = None) -> webelement.WebElement:
-        return self.pbc.find_element(selector=self, timeout=timeout)
+    def wait_for_element_visible(self, timeout: types.Number = None) -> webelement.WebElement:
+        return self.pbc.wait_for_element_visible(selector=self, timeout=timeout)
 
-    def assert_element(self, timeout: types.Number = None) -> bool:
-        return self.pbc.assert_element(selector=self, timeout=timeout)
+    def assert_element_visible(self, timeout: types.Number = None) -> bool:
+        return self.pbc.assert_element_visible(selector=self, timeout=timeout)
 
     def wait_for_exact_text_visible(self,
                                     text: str,
                                     timeout: types.Number = None) -> typing.Union[bool, webelement.WebElement]:
         return self.pbc.wait_for_exact_text_visible(text=text, selector=self, timeout=timeout)
 
-    def find_text(self, text: str, timeout: types.Number = None) -> typing.Union[bool, webelement.WebElement]:
-        return self.pbc.find_text(text=text, selector=self, timeout=timeout)
+    def wait_for_text_visible(self,
+                              text: str,
+                              timeout: types.Number = None) -> typing.Union[bool, webelement.WebElement]:
+        return self.pbc.wait_for_text_visible(text=text, selector=self, timeout=timeout)
 
-    def assert_text(self, text: str, timeout: types.Number = None) -> bool:
-        return self.pbc.assert_text(text=text, selector=self, timeout=timeout)
+    def assert_text_visible(self, text: str, timeout: types.Number = None) -> bool:
+        return self.pbc.assert_text_visible(text=text, selector=self, timeout=timeout)
 
     def assert_exact_text(self, text: str, timeout: types.Number = None) -> bool:
         return self.pbc.assert_exact_text(text=text, selector=self, timeout=timeout)
 
-    def wait_for_element_absent(self, timeout: types.Number = None) -> bool:
-        return self.pbc.wait_for_element_absent(selector=self, timeout=timeout)
+    def wait_for_element_not_present(self, timeout: types.Number = None) -> bool:
+        return self.pbc.wait_for_element_not_present(selector=self, timeout=timeout)
 
-    def assert_element_absent(self, timeout: types.Number = None) -> bool:
-        return self.pbc.assert_element_absent(selector=self, timeout=timeout)
+    def assert_element_not_present(self, timeout: types.Number = None) -> bool:
+        return self.pbc.assert_element_not_present(selector=self, timeout=timeout)
 
     def wait_for_element_not_visible(self, timeout: types.Number = None) -> bool:
         return self.pbc.wait_for_element_not_visible(selector=self, timeout=timeout)
