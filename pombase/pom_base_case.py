@@ -88,6 +88,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
     def pbconfig(self) -> pb_config.Config:
         return pb_config.Config()
 
+    # noinspection PyUnresolvedReferences
     @overrides.overrides
     def get_new_driver(self,
                        browser=None,
@@ -432,6 +433,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
 
     def _handle_new_driver(self, new_driver: webdriver.WebDriver, browser_name: str, switch_to: bool) -> None:
         self._drivers_list.append(new_driver)
+        # noinspection PyUnresolvedReferences
         self._BaseCase__driver_browser_map[new_driver] = browser_name
         if switch_to:
             self.driver: webdriver.WebDriver = new_driver

@@ -146,6 +146,7 @@ def pytest_configure(config: pt_config.Config) -> None:
     pb_config.Config().pytest_config = config
 
 
+# noinspection PyProtectedMember,PyUnresolvedReferences
 @pytest.fixture()
 def pb(request: pt_fixtures.FixtureRequest):
     """PomBase as a pytest fixture.

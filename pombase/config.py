@@ -24,6 +24,7 @@ class Config:
     def pytest_config(self) -> typing.Optional[pt_config.Config]:
         return self._pytest_config
 
+    # noinspection PyAttributeOutsideInit
     @pytest_config.setter
     def pytest_config(self, c: pt_config.Config) -> None:
         self._pytest_config = c
