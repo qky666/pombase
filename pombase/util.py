@@ -4,6 +4,7 @@ import typing
 import datetime
 import time
 import unicodedata
+import string
 import dateutil.parser as dateutil_parser
 
 import pombase.types as types
@@ -42,8 +43,10 @@ def wait_until(f: typing.Callable[..., T],
     if kwargs is None:
         kwargs = {}
 
-    assert timeout >= 0, f"timeout should be >= 0. timeout = {timeout}"
-    assert step > 0, f"step should be > 0. step = {step}"
+    if timeout < 0:
+        raise RuntimeError(f"timeout should be >= 0. timeout = {timeout}")
+    if step <= 0:
+        raise RuntimeError(f"step should be > 0. step = {step}")
 
     if equals is True:
         default_value = None if expected is not None else False
@@ -55,7 +58,7 @@ def wait_until(f: typing.Callable[..., T],
     stop = start + timeout
 
     value = default_value
-    # noinspection PyBroadException
+    # noinspection PyBroadException,TryExceptPass
     try:
         value = f(*args, **kwargs)
     except Exception:
@@ -70,7 +73,7 @@ def wait_until(f: typing.Callable[..., T],
             time.sleep(current + step - after)
         current = time.time()
         if current <= stop:
-            # noinspection PyBroadException
+            # noinspection PyBroadException,TryExceptPass
             try:
                 value = f(*args, **kwargs)
             except Exception:
@@ -138,7 +141,18 @@ class DateUtil:
 
     @staticmethod
     def python_format_date(date: datetime.datetime, python_format_str: str = "{date.day}/{date:%m}/{date.year}") -> str:
-        return python_format_str.format(date=date)
+        class CustomFormatter(string.Formatter):
+            def get_field(self,
+                          field_name: str,
+                          args: typing.Sequence[typing.Any],
+                          kwargs: typing.Mapping[str, typing.Any]) -> typing.Any:
+                if field_name.startswith("date") is False:
+                    raise RuntimeError(f"Incorrect python_format_str: {python_format_str}")
+                return super().get_field(field_name, args, kwargs)
+
+        formatter = CustomFormatter()
+        # noinspection StrFormat
+        return formatter.format(python_format_str, date=date)
 
 
 class CaseInsensitiveDict(typing.MutableMapping):

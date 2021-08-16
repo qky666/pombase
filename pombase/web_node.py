@@ -23,8 +23,8 @@ class Locator:
     translator = css_xpath.GenericTranslator()
 
     def __init__(self, selector: str, by: str = None, index: int = None) -> None:
-        assert len(selector) > 0, \
-            f"Validation error. Locator.selector should not be empty: selector={selector}"
+        if len(selector) == 0:
+            raise RuntimeError(f"Validation error. Locator.selector should not be empty: selector={selector}")
         self._selector = selector
         self._by = by
         self._index = index
@@ -146,8 +146,9 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
                 new_valid_count.append(0)
             if 1 in valid_count:
                 new_valid_count.append(1)
-            assert len(new_valid_count) > 0, \
-                f"WebNode locator index (not None) incompatible with valid_count: {valid_count}. Locator: {locator}"
+            if len(new_valid_count) == 0:
+                raise RuntimeError(f"WebNode locator index (not None) incompatible with valid_count: {valid_count}. "
+                                   f"Locator: {locator}")
             valid_count = new_valid_count
 
         super().__init__(
@@ -266,37 +267,39 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
 
     def validate(self) -> None:
         if self.name is None:
-            assert self.locator is not None, \
-                f"WebNode validation error. WebNode.name and WebNode.locator can not be both None: " \
-                f"name={self.name}, locator={self.locator}"
-            assert 0 not in self.valid_count, \
-                f"WebNode validation error. If WebNode.name is None, 0 should not be in WebNode.valid_count: " \
-                f"name={self.name}, valid_count={self.valid_count}"
+            if self.locator is None:
+                raise RuntimeError(f"WebNode validation error. WebNode.name and WebNode.locator can not be both None: "
+                                   f"name={self.name}, locator={self.locator}")
+            if 0 in self.valid_count:
+                raise RuntimeError(f"WebNode validation error. If WebNode.name is None, "
+                                   f"0 should not be in WebNode.valid_count: "
+                                   f"name={self.name}, valid_count={self.valid_count}")
 
         if self.name is not None:
-            assert len(self.name) > 0, \
-                f"WebNode validation error. WebNode.name length should not be 0: name={self.name}"
-            assert self.separator not in self.name, \
-                f"WebNode validation error. WebNode.name should not include '{self.separator}': name={self.name}"
+            if len(self.name) == 0:
+                raise RuntimeError(f"WebNode validation error. WebNode.name length should not be 0: name={self.name}")
+            if self.separator in self.name:
+                raise RuntimeError(f"WebNode validation error. WebNode.name should not include '{self.separator}': "
+                                   f"name={self.name}")
             try:
                 int(self.name)
             except ValueError:
                 pass
             else:
-                assert False, \
-                    f"WebNode validation error. WebNode.name can not be an int: name={self.name}"
-            assert self.name.startswith("_") is False, \
-                f"WebNode validation error. WebNode.name should start with '_': name={self.name}"
-            assert self.name.endswith("_") is False, \
-                f"WebNode validation error. WebNode.name should end with '_': name={self.name}"
-            assert self.name.isidentifier() is True, \
-                f"WebNode validation error. WebNode.name should be a valid identifier: name={self.name}"
+                raise RuntimeError(f"WebNode validation error. WebNode.name can not be an int: name={self.name}")
+            if self.name.startswith("_"):
+                raise RuntimeError(f"WebNode validation error. WebNode.name should start with '_': name={self.name}")
+            if self.name.endswith("_"):
+                raise RuntimeError(f"WebNode validation error. WebNode.name should end with '_': name={self.name}")
+            if self.name.isidentifier() is False:
+                raise RuntimeError(f"WebNode validation error. WebNode.name should be a valid identifier: "
+                                   f"name={self.name}")
 
         if self.locator is not None and self.locator.index is not None:
             for valid in self.valid_count:
-                assert valid in [0, 1], \
-                    f"WebNode validation error. WebNode.valid_count should be in [0, 1]: " \
-                    f"index={self.locator.index}, valid_count={self.valid_count}"
+                if valid not in [0, 1]:
+                    raise RuntimeError(f"WebNode validation error. WebNode.valid_count should be in [0, 1]: "
+                                       f"index={self.locator.index}, valid_count={self.valid_count}")
 
     def validate_unique_descendant_names(self) -> None:
         nearest = self.find_nearest_named_ancestor_or_self()
@@ -306,11 +309,12 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
         named = [node for node in named if node.parent.find_nearest_named_ancestor_or_self() == nearest]
         for node in named:
             found = nearest._find_directly_descendant_from_nearest_named_ancestor(node.name)
-            assert len(found) == 1, f"Found {len(found)} nodes with name '{node.name}' starting from node: {nearest}"
+            if len(found) != 1:
+                raise RuntimeError(f"Found {len(found)} nodes with name '{node.name}' starting from node: {nearest}")
             found_node = found.pop()
-            assert found_node == node, \
-                f"Found one node with name '{node.name}', but it is not the expected node. \n" \
-                f"Real: {found_node} \nExpected: {node}"
+            if found_node != node:
+                raise RuntimeError(f"Found one node with name '{node.name}', but it is not the expected node. \n"
+                                   f"Real: {found_node} \nExpected: {node}")
 
     def _find_directly_descendant_from_nearest_named_ancestor(self, name: str) -> set[WebNode]:
         nearest = self.find_nearest_named_ancestor_or_self()
@@ -335,29 +339,32 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     def find_node(self, path: str, descendants_only: bool = True) -> WebNode:
         base_node = self
         found = base_node._find_descendant(path)
-        assert len(found) <= 1, f"Found {len(found)} nodes with path '{path}' starting from node: {base_node}"
+        if len(found) > 1:
+            raise RuntimeError(f"Found {len(found)} nodes with path '{path}' starting from node: {base_node}")
         if len(found) == 1:
             return found.pop()
         else:
-            assert descendants_only is False and self.is_root is False, \
-                f"Node with path '{path}' (only_descendants={descendants_only}) not found starting from node: {self}"
+            if descendants_only is True or self.is_root is True:
+                raise RuntimeError(f"Node with path '{path}' (only_descendants={descendants_only}) "
+                                   f"not found starting from node: {self}")
             while base_node.parent is not None:
                 base_node_parent: WebNode = base_node.parent
                 base_node = base_node_parent.find_nearest_named_ancestor_or_self()
                 found = base_node._find_descendant(path)
-                assert len(found) <= 1, f"Found {len(found)} nodes with path '{path}' starting from node: {base_node}"
+                if len(found) > 1:
+                    raise RuntimeError(f"Found {len(found)} nodes with path '{path}' starting from node: {base_node}")
                 if len(found) == 1:
                     return found.pop()
             else:
-                assert False, \
-                    f"Node with path '{path}' (only_descendants={descendants_only}, whole tree has been searched) " \
-                    f"not found starting from node: {self}"
+                raise RuntimeError(f"Node with path '{path}' (only_descendants={descendants_only}, "
+                                   f"whole tree has been searched) not found starting from node: {self}")
 
     def _find_descendant(self, path: str) -> set[WebNode]:
         names = path.split(self.separator)
         while "" in names:
             names.remove("")
-        assert len(names) > 0, f"Invalid path: {path}"
+        if len(names) == 0:
+            raise RuntimeError(f"Invalid path: {path}")
         nodes = set(anytree.findall_by_attr(self, names[0]))
         if self in nodes:
             nodes.remove(self)
@@ -930,7 +937,7 @@ def as_css(selector: str, by: str = None) -> typing.Optional[str]:
     elif by == selenium_by.By.CSS_SELECTOR:
         return selector
     else:
-        assert False, f"Unknown 'by': {by}"
+        raise RuntimeError(f"Unknown 'by': {by}")
 
 
 def as_xpath(selector: str, by: str = None) -> str:
@@ -953,7 +960,7 @@ def as_xpath(selector: str, by: str = None) -> str:
     elif by == selenium_by.By.CSS_SELECTOR:
         return Locator.translator.css_to_xpath(selector, ".//")
     else:
-        assert False, f"Unknown 'by': {by}"
+        raise RuntimeError(f"Unknown 'by': {by}")
 
 
 def compound(locator: PseudoLocator, *args: PseudoLocator) -> Locator:
@@ -984,7 +991,7 @@ def get_locator(obj: PseudoLocator) -> Locator:
     elif isinstance(obj, typing.Iterable):
         return Locator(*obj)
     else:
-        assert False, f"Can not get object as a Locator: {obj}"
+        raise RuntimeError(f"Can not get object as a Locator: {obj}")
 
 
 PseudoLocator = typing.Union[Locator, str, dict, typing.Iterable, WebNode]

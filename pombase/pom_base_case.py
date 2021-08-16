@@ -442,7 +442,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 # Make sure the invisible browser window is big enough
                 width = sb_settings.HEADLESS_START_WIDTH
                 height = sb_settings.HEADLESS_START_HEIGHT
-                # noinspection PyBroadException
+                # noinspection PyBroadException,TryExceptPass
                 try:
                     self.driver.set_window_size(width, height)
                     self.wait_for_ready_state_complete()
@@ -455,7 +455,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 if self.browser == "chrome" or self.browser == "edge":
                     width = sb_settings.CHROME_START_WIDTH
                     height = sb_settings.CHROME_START_HEIGHT
-                    # noinspection PyBroadException
+                    # noinspection PyBroadException,TryExceptPass
                     try:
                         if self.maximize_option:
                             self.driver.maximize_window()
@@ -466,7 +466,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                         pass  # Keep existing browser resolution
                 elif self.browser == "firefox":
                     width = sb_settings.CHROME_START_WIDTH
-                    # noinspection PyBroadException
+                    # noinspection PyBroadException,TryExceptPass
                     try:
                         if self.maximize_option:
                             self.driver.maximize_window()
@@ -478,14 +478,14 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 elif self.browser == "safari":
                     width = sb_settings.CHROME_START_WIDTH
                     if self.maximize_option:
-                        # noinspection PyBroadException
+                        # noinspection PyBroadException,TryExceptPass
                         try:
                             self.driver.maximize_window()
                             self.wait_for_ready_state_complete()
                         except Exception:
                             pass  # Keep existing browser resolution
                     else:
-                        # noinspection PyBroadException
+                        # noinspection PyBroadException,TryExceptPass
                         try:
                             self.driver.set_window_rect(10, 30, width, 630)
                         except Exception:
@@ -1040,8 +1040,9 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             if isinstance(arg, web_node.WebNode):
                 new_args.append(arg.locator.selector)
                 if "by" in kwargs:
-                    assert kwargs["by"] == arg.locator.by, \
-                        f"Incorrect 'by' in assert_elements kwargs. Found: {kwargs['by']}. Expected: {arg.locator.by}"
+                    if kwargs["by"] != arg.locator.by:
+                        raise RuntimeError(f"Incorrect 'by' in assert_elements kwargs. "
+                                           f"Found: {kwargs['by']}. Expected: {arg.locator.by}")
                 else:
                     kwargs["by"] = arg.locator.by
             else:

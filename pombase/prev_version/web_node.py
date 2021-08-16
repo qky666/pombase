@@ -352,8 +352,9 @@ class WebNode(anytree.node.anynode.AnyNode):
     #     if isinstance(value, WebNode) and name != "parent" and name.startswith("_") is False:
     #         if value.name is None:
     #             value.name = name
-    #         assert name == value.name, \
-    #             f"Attribute name is '{name}', node name is '{value.name}'. Should be equal. Node: {self}"
+    #         if name != value.name:
+    #             raise RuntimeError(f"Attribute name is '{name}', node name is '{value.name}'. "
+    #                                f"Should be equal. Node: {self}")
     #         value.parent = self
 
     ##############

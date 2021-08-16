@@ -132,7 +132,8 @@ class PytestVar(enum.Enum):
                     elif isinstance(default, str):
                         default = True if default.lower() in ["true", "1"] else False
             else:
-                assert self.var_type == "string", f"var_type not supported: {self.var_type}"
+                if self.var_type != "string":
+                    raise RuntimeError(f"var_type not supported: {self.var_type}")
             kwargs["default"] = default
         parser.addini(self.ini_name, help=self.help_text, type=self.var_type, **kwargs)
 
