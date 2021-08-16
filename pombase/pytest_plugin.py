@@ -5,6 +5,7 @@ import _pytest.config as pt_config
 import _pytest.fixtures as pt_fixtures
 import os
 import enum
+import overrides
 import seleniumbase.config as sb_config
 # noinspection PyPackageRequirements
 import src.testproject.enums as tp_enums
@@ -154,9 +155,11 @@ def pb(request: pt_fixtures.FixtureRequest):
     You may need to use this for tests that use other pytest fixtures."""
 
     class BaseClass(pom_base_case.PomBaseCase):
+        @overrides.overrides
         def setUp(self, masterqa_mode=False):
             super().setUp(masterqa_mode)
 
+        @overrides.overrides
         def tearDown(self):
             self.save_teardown_screenshot()
             super().tearDown()
