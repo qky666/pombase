@@ -66,7 +66,7 @@ def auth_user_pass(proxy_string: typing.Optional[str],
 
 def recalculate_selector_by(selector: typing.Union[str, web_node.WebNode], by: str = None):
     if isinstance(selector, web_node.WebNode):
-        return selector.locator.selector, selector.locator.by
+        return selector.compound_locator.selector, selector.compound_locator.by
     elif by is None:
         return selector, pombase.web_node.infer_by_from_selector(selector)
     elif by == By.CSS_SELECTOR and pombase.web_node.infer_by_from_selector(selector) == By.XPATH:

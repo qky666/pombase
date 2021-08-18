@@ -8,11 +8,13 @@ import itertools
 import logging
 import overrides
 import selenium.webdriver.remote.webelement as webelement
-from cssselect import xpath as css_xpath
-from selenium.webdriver.common import by as selenium_by
+import cssselect.xpath as css_xpath
+import selenium.webdriver.common.by as selenium_by
+import seleniumbase.config.settings as sb_settings
 
 import pombase.pom_base_case as pom_base_case
 import pombase.types as types
+import pombase.util
 import pombase.util as util
 
 NodeCount = typing.Union[None, int, range, itertools.count, typing.Iterable[int]]
@@ -81,7 +83,7 @@ class Locator:
             return False
         except AssertionError:
             return False
-        if other.selector == self.selector and other.by == self.by:
+        if other is not None and other.selector == self.selector and other.by == self.by:
             return True
         else:
             return False
@@ -112,6 +114,7 @@ class Locator:
 
 class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     separator = "__"
+    default_name = None
 
     @overrides.overrides
     def __init__(self,
@@ -125,9 +128,12 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
                  ignore_invisible: bool = True,
                  pbc: pom_base_case.PomBaseCase = None,
                  **kwargs: typing.Any,
-                 ):
+                 ) -> None:
         if children is None:
             children = []
+
+        if name is None:
+            name = self.default_name
 
         override_parent = get_locator(override_parent) if override_parent is not None else None
         if override_parent is not None and locator is None:
@@ -181,11 +187,11 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
         # for key, value in kwargs.items():
         #     setattr(self, key, value)
 
+        # named_nodes
+        self._named_nodes = None
+
         # Util
         self.logger = logging.getLogger()
-
-        # Init node
-        self.init_node()
 
         # Validation -> Not here, but in _post_attach
         # self.validate()
@@ -194,27 +200,32 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
         children: typing.Iterable[WebNode]
         self.children = children
 
+        # Init node
+        self.init_node()
+        self.init_named_nodes()
+        self.validate()
+
     ######################
     # Computed properties
     ######################
     @property
-    def max_valid_count(self) -> typing.Optional[int]:
-        if type(self.valid_count) == itertools.count:
-            return None
-        else:
-            return max(self.valid_count)
-
-    @property
-    def relevant_properties(self) -> typing.Dict[str]:
+    def relevant_properties(self) -> dict[str]:
         return dict(
             locator=self.locator,
             name=self.name,
             override_parent=self.override_parent,
             valid_count=self.valid_count,
             ignore_invisible=self.ignore_invisible,
-            pbc=self.pbc,
+            pbc=self._pbc,
             **self._kwargs,
         )
+
+    @property
+    def max_valid_count(self) -> typing.Optional[int]:
+        if type(self.valid_count) == itertools.count:
+            return None
+        else:
+            return max(self.valid_count)
 
     @property
     def pbc(self) -> typing.Optional[pom_base_case.PomBaseCase]:
@@ -253,6 +264,13 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
 
     def relative_name_from_ascendant(self, ascendant: WebNode) -> str:
         return ascendant.relative_name_of_descendant(self)
+
+    ###################
+    # Compound Locator
+    ###################
+    @property
+    def compound_locator(self) -> Locator:
+        return compound(self.path)
 
     ##############
     # Validations
@@ -326,6 +344,39 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     ############
     def init_node(self) -> None:
         pass
+
+    def init_named_nodes(self) -> None:
+        pass
+
+    @classmethod
+    def generate_init_named_nodes(cls,
+                                  decorator: str = "@overrides",
+                                  prefix: str = "nn_",
+                                  init_args: list = None,
+                                  init_kwargs: dict = None) -> str:
+        if init_args is None:
+            init_args = []
+        if init_kwargs is None:
+            init_kwargs = {}
+        page = cls(*init_args, **init_kwargs)
+        nodes: typing.Iterable[WebNode] = anytree.iterators.PreOrderIter(
+            page,
+            filter_=lambda n: n.name is not None and n != page,
+        )
+        names = [node.relative_name_from_ascendant(page) for node in nodes]
+        names_code = "\n".join([f'\t\tself.{prefix}{name} = self.find_node("{name}")' for name in names])
+        code = f"\tdef init_named_nodes(self) -> None:\n{names_code}"
+        if len(decorator) > 0:
+            code = f"\t{decorator}\n{code}"
+        return code
+
+    @classmethod
+    def print_init_named_nodes(cls,
+                               decorator: str = "@overrides",
+                               prefix: str = "nn_",
+                               init_args: list = None,
+                               init_kwargs: dict = None) -> None:
+        print(cls.generate_init_named_nodes(decorator, prefix, init_args, init_kwargs))
 
     ################
     # Finding nodes
@@ -456,10 +507,10 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     def has_valid_count(self) -> bool:
         return self._has_valid_count()
 
-    def wait_until_valid_count(self,
-                               timeout: types.Number = None,
-                               raise_error: bool = True,
-                               force_count_not_zero: bool = True, ) -> bool:
+    def wait_until_valid_count_succeeded(self,
+                                         timeout: types.Number = None,
+                                         raise_error: bool = True,
+                                         force_count_not_zero: bool = True, ) -> bool:
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
         raise_error = f"WebNode had not valid count after {timeout} second{plural}: {self}" \
             if raise_error is True else None
@@ -472,10 +523,10 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     #########
     # Loaded
     #########
-    def wait_until_loaded(self,
-                          timeout: types.Number = None,
-                          raise_error: bool = True,
-                          force_count_not_zero: bool = True, ) -> bool:
+    def wait_until_loaded_succeeded(self,
+                                    timeout: types.Number = None,
+                                    raise_error: bool = True,
+                                    force_count_not_zero: bool = True, ) -> bool:
         # Handle frames
         element_in_iframe = self.is_element_in_an_iframe()
         if element_in_iframe is True:
@@ -484,22 +535,22 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
                 if node.is_iframe() is True:
                     node.switch_to_frame(timeout)
 
-        valid_count = self.wait_until_valid_count(timeout, raise_error, force_count_not_zero)
+        valid_count = self.wait_until_valid_count_succeeded(timeout, raise_error, force_count_not_zero)
         if valid_count is False:
             if element_in_iframe is True:
                 self.switch_to_default_content()
             return False
 
-        children: typing.List[WebNode] = []
+        children: list[WebNode] = []
         if self.is_multiple:
             multiples = self.get_multiple_nodes()
             for node in multiples:
-                node.wait_until_loaded(timeout, raise_error)
+                node.wait_until_loaded_succeeded(timeout, raise_error)
                 children = children + node.children
         else:
             children = self.children
         for node in children:
-            loaded = node.wait_until_loaded(timeout, raise_error, force_count_not_zero=False)
+            loaded = node.wait_until_loaded_succeeded(timeout, raise_error, force_count_not_zero=False)
             if loaded is False:
                 if element_in_iframe is True:
                     self.switch_to_default_content()
@@ -509,9 +560,9 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
                 self.switch_to_default_content()
             return True
 
-    ################
-    # get/set value
-    ################
+    ######################
+    # get/set field value
+    ######################
     def override_get_field_value(self, timeout: types.Number = None) -> typing.Any:
         return self.default_get_field_value(timeout)
 
@@ -610,6 +661,24 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
         else:
             self.update_text(str(value), timeout)
 
+    def wait_until_field_value_succeeded(self,
+                                         value: typing.Any,
+                                         timeout: types.Number = None,
+                                         equals: bool = True,
+                                         raise_error: bool = True) -> bool:
+        if raise_error is True:
+            raise_error = f"Timeout in wait_until_field_value_is: " \
+                          f"value={value}, timeout={timeout}, equals={equals}. Node: {self}"
+        else:
+            raise_error = None
+        if timeout is None:
+            timeout = sb_settings.LARGE_TIMEOUT
+        return pombase.util.wait_until(self.get_field_value,
+                                       timeout=timeout,
+                                       expected=value,
+                                       equals=equals,
+                                       raise_error=raise_error)
+
     #######################
     # PomBaseCase methods
     #######################
@@ -634,7 +703,6 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
     #######################
     # SeleniumBase methods
     #######################
-    # TODO: Document these methods
     def click(self, timeout: types.Number = None, delay: int = 0) -> None:
         self.pbc.click(selector=self, timeout=timeout, delay=delay)
 
@@ -910,6 +978,100 @@ class WebNode(anytree.node.anynode.AnyNode, overrides.EnforceOverrides):
         return self.pbc.deferred_assert_text(text=text, selector=self, timeout=timeout)
 
 
+class TableNode(WebNode):
+    @overrides.overrides
+    def __init__(self,
+                 locator: Locator = None,
+                 *,
+                 parent: WebNode = None,
+                 children: typing.Iterable[WebNode] = None,
+                 name: str = None,
+                 override_parent: PseudoLocator = None,
+                 valid_count: NodeCount = range(2),
+                 ignore_invisible: bool = True,
+                 pbc: pom_base_case.PomBaseCase = None,
+                 header_row_locator: typing.Optional[PseudoLocator] = "./thead/tr",
+                 header_cell_locator: typing.Optional[PseudoLocator] = "./th",
+                 data_row_locator: PseudoLocator = "./tbody/tr",
+                 data_cell_locator: PseudoLocator = "./td",
+                 tag_name: typing.Optional[str] = "table",
+                 **kwargs: typing.Any,
+                 ) -> None:
+        super().__init__(locator=locator,
+                         parent=parent,
+                         children=children,
+                         name=name,
+                         override_parent=override_parent,
+                         valid_count=valid_count,
+                         ignore_invisible=ignore_invisible,
+                         pbc=pbc,
+                         **kwargs)
+        self.header_row_locator = get_locator(header_row_locator) if header_row_locator is not None else None
+        self.header_cell_locator = get_locator(header_cell_locator) if header_cell_locator is not None else None
+        self.data_row_locator = get_locator(data_row_locator) if data_row_locator is not None else None
+        self.data_cell_locator = get_locator(data_cell_locator) if data_cell_locator is not None else None
+        self.tag_name = tag_name
+
+    @overrides.overrides
+    def init_node(self) -> None:
+        super().init_node()
+        self.nn_header_row = WebNode(self.header_row_locator, parent=self, name="header_row") \
+            if self.header_row_locator is not None else None
+        self.nn_header_cells = WebNode(
+            self.header_cell_locator,
+            parent=self,
+            name="header_cells",
+            valid_count=itertools.count(),
+        ) if self.header_cell_locator is not None else None
+        self.nn__data_rows = WebNode(
+            self.data_row_locator,
+            parent=self,
+            name="data_rows",
+            valid_count=itertools.count(),
+        )
+
+    @overrides.overrides
+    def init_named_nodes(self) -> None:
+        self.nn_header_row = self.find_node("header_row") if self.header_row_locator is not None else None
+        self.nn_header_cells = self.find_node("header_cells") if self.header_cell_locator is not None else None
+        self.nn_data_rows = self.find_node("data_rows")
+
+    def header_cell_text(self, column: int, timeout: types.Number = None) -> str:
+        return self.nn_header_cells.get_multiple_nodes()[column].get_text(timeout)
+
+    def header_cells_texts(self, timeout: types.Number = None) -> list[str]:
+        return [cell.get_text(timeout) for cell in self.nn_header_cells.get_multiple_nodes()]
+
+    def header_cell_index_for_text(self, text: str, timeout: types.Number = None) -> typing.Optional[int]:
+        header_texts = [t.strip() for t in self.header_cells_texts(timeout)]
+        if text in header_texts:
+            return header_texts.index(text)
+
+        header_texts_lower = [t.lower() for t in header_texts]
+        if text in header_texts_lower:
+            return header_texts_lower.index(text)
+
+        header_texts_lower_underscore = [t.replace(" ", "_") for t in header_texts_lower]
+        if text in header_texts_lower_underscore:
+            return header_texts_lower_underscore.index(text)
+
+        indexes = [index for index, header in enumerate(header_texts) if text in header]
+        if len(indexes) > 0:
+            return indexes[0]
+
+        indexes = [index for index, header in enumerate(header_texts_lower) if text in header]
+        if len(indexes) > 0:
+            return indexes[0]
+
+        indexes = [index for index, header in enumerate(header_texts_lower_underscore) if text in header]
+        if len(indexes) > 0:
+            return indexes[0]
+
+        return None
+
+    # TODO: Continue from here
+
+
 def node_from(selector: typing.Union[str, WebNode], by: str = None) -> WebNode:
     if isinstance(selector, WebNode):
         return selector
@@ -963,10 +1125,19 @@ def as_xpath(selector: str, by: str = None) -> str:
         raise RuntimeError(f"Unknown 'by': {by}")
 
 
-def compound(locator: PseudoLocator, *args: PseudoLocator) -> Locator:
-    locators = [locator] + list(args)
-    locators: list[Locator] = [get_locator(loc) for loc in locators]
-    return functools.reduce(lambda l1, l2: l1.append(l2), locators)
+def compound(locators: typing.Iterable[typing.Optional[PseudoLocator]]) -> Locator:
+    loc_list: list[Locator] = []
+    for pseudo_loc in locators:
+        if isinstance(pseudo_loc, WebNode) and pseudo_loc.override_parent is not None:
+            loc_list = [pseudo_loc.override_parent]
+        else:
+            loc = get_locator(pseudo_loc)
+            if loc is not None:
+                loc_list.append(loc)
+    if len(loc_list) == 0:
+        return Locator("html")
+    else:
+        return functools.reduce(lambda l1, l2: l1.append(l2), loc_list)
 
 
 def infer_by_from_selector(selector: str) -> str:
@@ -979,7 +1150,7 @@ def infer_by_from_selector(selector: str) -> str:
         return selenium_by.By.CSS_SELECTOR
 
 
-def get_locator(obj: PseudoLocator) -> Locator:
+def get_locator(obj: PseudoLocator) -> typing.Optional[Locator]:
     if isinstance(obj, Locator):
         return obj
     elif isinstance(obj, WebNode):

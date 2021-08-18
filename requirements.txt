@@ -4,6 +4,7 @@ anytree==2.8.0
 python-dateutil==2.8.2
 pytest-dotenv==0.5.2
 overrides==6.1.0
+inflection==0.5.1
 # decorate-all-methods==0.0.2
 # pytest-base-url==1.4.2
 # introspection==1.3
