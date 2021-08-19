@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from inflection import parameterize
 from overrides import overrides
-from pombase.web_node import WebNode, Locator
+from pombase.web_node import GenericNode, Locator
 from pages.toolsqa.toolsqa_page import ToolsQAPage
 
 
@@ -14,9 +14,9 @@ class HomePage(ToolsQAPage):
         super().init_node()
 
         # cards
-        cards = WebNode(Locator("div.category-cards"), parent=self, name="cards", valid_count=1)
+        cards = GenericNode(Locator("div.category-cards"), parent=self, name="cards", valid_count=1)
 
-        class Card(WebNode):
+        class Card(GenericNode):
             @overrides
             def __init__(self, card: str) -> None:
                 super().__init__(

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from overrides import overrides
-from pombase.web_node import WebNode, Locator
+from pombase.web_node import GenericNode, Locator
 
 
-class ToolsQAPage(WebNode):
+class ToolsQAPage(GenericNode):
     default_name = "toolsqa"
 
     @overrides
@@ -12,8 +12,8 @@ class ToolsQAPage(WebNode):
         super().init_node()
 
         # header
-        header = WebNode(Locator("header"), parent=self, name="header", valid_count=1)
-        WebNode(Locator("a[href='https://demoqa.com']"), parent=header, name="logo", valid_count=1)
+        header = GenericNode(Locator("header"), parent=self, name="header", valid_count=1)
+        GenericNode(Locator("a[href='https://demoqa.com']"), parent=header, name="logo", valid_count=1)
 
     @overrides
     def init_named_nodes(self) -> None:

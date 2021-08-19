@@ -64,8 +64,8 @@ def auth_user_pass(proxy_string: typing.Optional[str],
     return proxy_auth, proxy_user, proxy_pass
 
 
-def recalculate_selector_by(selector: typing.Union[str, web_node.WebNode], by: str = None):
-    if isinstance(selector, web_node.WebNode):
+def recalculate_selector_by(selector: typing.Union[str, web_node.GenericNode], by: str = None):
+    if isinstance(selector, web_node.GenericNode):
         return selector.compound_locator.selector, selector.compound_locator.by
     elif by is None:
         return selector, pombase.web_node.infer_by_from_selector(selector)
@@ -534,7 +534,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
     # New methods
     ##############
 
-    def count(self, selector: typing.Union[str, web_node.WebNode], by: str = None) -> int:
+    def count(self, selector: typing.Union[str, web_node.GenericNode], by: str = None) -> int:
         node = web_node.node_from(selector, by)
         if node.ignore_invisible is True:
             return len(self.find_visible_elements(node))
@@ -542,7 +542,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             return len(self.find_elements(node))
 
     def is_iframe(self,
-                  selector: typing.Union[str, web_node.WebNode],
+                  selector: typing.Union[str, web_node.GenericNode],
                   by: str = None,
                   timeout: types.Number = None) -> bool:
         selector, by = recalculate_selector_by(selector, by)
@@ -556,7 +556,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             return False
 
     def get_tag_name(self,
-                     selector: typing.Union[str, web_node.WebNode],
+                     selector: typing.Union[str, web_node.GenericNode],
                      by: str = None,
                      timeout: typing.Union[int, float] = None) -> str:
         selector, by = recalculate_selector_by(selector, by)
@@ -564,7 +564,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
         return element.tag_name
 
     def get_selected_options(self,
-                             selector: typing.Union[str, web_node.WebNode],
+                             selector: typing.Union[str, web_node.GenericNode],
                              by: str = None,
                              timeout: typing.Union[int, float] = None, ) -> list[str]:
         selector, by = recalculate_selector_by(selector, by)
@@ -574,7 +574,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
         return [item.text for item in selected]
 
     def deselect_all_options(self,
-                             selector: typing.Union[str, web_node.WebNode],
+                             selector: typing.Union[str, web_node.GenericNode],
                              by: str = None,
                              timeout: typing.Union[int, float] = None, ) -> None:
         selector, by = recalculate_selector_by(selector, by)
@@ -603,7 +603,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
 
     @overrides.overrides
     def click_chain(self, selectors_list, by=By.CSS_SELECTOR, timeout=None, spacing=0):
-        if isinstance(selectors_list, web_node.WebNode):
+        if isinstance(selectors_list, web_node.GenericNode):
             selectors_list, by = [selectors_list.locator.selector], selectors_list.locator.by
         super().click_chain(selectors_list, by, timeout, spacing)
 
@@ -1037,7 +1037,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
     def assert_elements(self, *args, **kwargs):
         new_args = []
         for arg in args:
-            if isinstance(arg, web_node.WebNode):
+            if isinstance(arg, web_node.GenericNode):
                 new_args.append(arg.locator.selector)
                 if "by" in kwargs:
                     if kwargs["by"] != arg.locator.by:

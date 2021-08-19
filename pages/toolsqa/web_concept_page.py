@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from overrides import overrides
-from pombase.web_node import WebNode, Locator
+from pombase.web_node import GenericNode, Locator
 from inflection import parameterize
 
 
-class AccordionElement(WebNode):
+class AccordionElement(GenericNode):
     @overrides
-    def __init__(self, title: str, parent: WebNode = None):
+    def __init__(self, title: str, parent: GenericNode = None):
         super().__init__(
             Locator(f".//div[contains(@class,'element-group')]"
                     f"[.//div[contains(@class,'header-text') and .='{title}']]"),
@@ -22,10 +22,10 @@ class AccordionElement(WebNode):
         super().init_node()
 
         # title
-        WebNode(Locator("div.header-text"), parent=self, name="title", valid_count=1)
+        GenericNode(Locator("div.header-text"), parent=self, name="title", valid_count=1)
 
         # element list
-        WebNode(Locator("div.element-list.show"), parent=self, name="element_list")
+        GenericNode(Locator("div.element-list.show"), parent=self, name="element_list")
 
     @overrides
     def init_named_nodes(self) -> None:
@@ -44,7 +44,7 @@ class AccordionElement(WebNode):
     def select_sub_element(self, name: str) -> None:
         element_list = self.nn_element_list
 
-        class SubElement(WebNode):
+        class SubElement(GenericNode):
             @overrides
             def __init__(self, sub_element: str) -> None:
                 super().__init__(
@@ -60,7 +60,7 @@ class AccordionElement(WebNode):
         element.parent = None
 
 
-class WebConceptPage(WebNode):
+class WebConceptPage(GenericNode):
     default_name = "toolsqa_web_concept"
 
     @overrides
@@ -68,10 +68,10 @@ class WebConceptPage(WebNode):
         super().init_node()
 
         # page title
-        WebNode(Locator(".//div[contains(@class,'main-header')]"), parent=self, name="page_title", valid_count=1)
+        GenericNode(Locator(".//div[contains(@class,'main-header')]"), parent=self, name="page_title", valid_count=1)
 
         # left pannel
-        left_pannel = WebNode(Locator("div.left-pannel"), parent=self, name="left_pannel", valid_count=1)
+        left_pannel = GenericNode(Locator("div.left-pannel"), parent=self, name="left_pannel", valid_count=1)
         AccordionElement("Elements", parent=left_pannel)
         AccordionElement("Forms", parent=left_pannel)
         AccordionElement("Alerts, Frame & Windows", parent=left_pannel)
