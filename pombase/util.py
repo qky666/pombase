@@ -1,23 +1,23 @@
 from __future__ import annotations
 import re
-import typing
-import datetime
-import time
-import unicodedata
-import string
-import dateutil.parser as dateutil_parser
+from typing import Callable, TypeVar, Any, Sequence, Mapping, MutableMapping, Iterable, Optional
+from datetime import datetime, date as dt_date, time as dt_time
+from time import time as t_time, sleep
+from unicodedata import normalize
+from string import Formatter
+from dateutil.parser import parserinfo, parse
 
-import pombase.types as types
+import pombase.types as pb_types
 
-T = typing.TypeVar('T')
+T = TypeVar('T')
 
 
-def wait_until(f: typing.Callable[..., T],
+def wait_until(f: Callable[..., T],
                args: list = None,
                kwargs: dict = None,
-               timeout: types.Number = 10,
-               step: types.Number = 0.5,
-               expected: typing.Any = True,
+               timeout: pb_types.Number = 10,
+               step: pb_types.Number = 0.5,
+               expected: Any = True,
                equals: bool = True,
                raise_error: str = None, ) -> (bool, T):
     """
@@ -53,7 +53,7 @@ def wait_until(f: typing.Callable[..., T],
     else:
         default_value = expected
 
-    current = time.time()
+    current = t_time()
     start = current
     stop = start + timeout
 
@@ -68,10 +68,10 @@ def wait_until(f: typing.Callable[..., T],
     while keep_looping:
         if (value == expected) is equals:
             return True, value
-        after = time.time()
+        after = t_time()
         if after < current + step:
-            time.sleep(current + step - after)
-        current = time.time()
+            sleep(current + step - after)
+        current = t_time()
         if current <= stop:
             # noinspection PyBroadException,TryExceptPass
             try:
@@ -90,7 +90,7 @@ def wait_until(f: typing.Callable[..., T],
             return False, value
 
 
-class ParserInfoEs(dateutil_parser.parserinfo):
+class ParserInfoEs(parserinfo):
     HMS = [('h', 'hour', 'hours', 'hora', 'horas'),
            ('m', 'minute', 'minutes', 'minuto', 'minutos'),
            ('s', 'second', 'seconds', 'segundo', 'segundos')]
@@ -127,35 +127,35 @@ class ParserInfoEs(dateutil_parser.parserinfo):
 
 class DateUtil:
     @staticmethod
-    def parse_datetime_es(date_str: str) -> datetime.datetime:
+    def parse_datetime_es(date_str: str) -> datetime:
         parser_info_es = ParserInfoEs()
-        return dateutil_parser.parse(date_str, parser_info_es)
+        return parse(date_str, parser_info_es)
 
     @staticmethod
-    def parse_date_es(date_str: str) -> datetime.date:
+    def parse_date_es(date_str: str) -> dt_date:
         return DateUtil.parse_datetime_es(date_str).date()
 
     @staticmethod
-    def parse_time_es(date_str: str) -> datetime.time:
+    def parse_time_es(date_str: str) -> dt_time:
         return DateUtil.parse_datetime_es(date_str).time()
 
     @staticmethod
-    def python_format_date(date: datetime.datetime, python_format_str: str = "{date.day}/{date:%m}/{date.year}") -> str:
-        class CustomFormatter(string.Formatter):
+    def python_format_date(the_date: datetime, python_format_str: str = "{date.day}/{date:%m}/{date.year}") -> str:
+        class CustomFormatter(Formatter):
             def get_field(self,
                           field_name: str,
-                          args: typing.Sequence[typing.Any],
-                          kwargs: typing.Mapping[str, typing.Any]) -> typing.Any:
+                          args: Sequence[Any],
+                          kwargs: Mapping[str, Any]) -> Any:
                 if field_name.startswith("date") is False:
                     raise RuntimeError(f"Incorrect python_format_str: {python_format_str}")
                 return super().get_field(field_name, args, kwargs)
 
         formatter = CustomFormatter()
         # noinspection StrFormat
-        return formatter.format(python_format_str, date=date)
+        return formatter.format(python_format_str, date=the_date)
 
 
-class CaseInsensitiveDict(typing.MutableMapping):
+class CaseInsensitiveDict(MutableMapping):
     """A case-insensitive ``dict``-like object.
     Implements all methods and operations of
     ``MutableMapping`` as well as dict's ``copy``. Also
@@ -205,7 +205,7 @@ class CaseInsensitiveDict(typing.MutableMapping):
         return ((lowerkey, keyval[1]) for lowerkey, keyval in self._store.items())
 
     def __eq__(self, other):
-        if isinstance(other, typing.Mapping):
+        if isinstance(other, Mapping):
             other = CaseInsensitiveDict(other)
         else:
             return NotImplemented
@@ -239,27 +239,27 @@ def clean(s: str) -> str:
 
 
 def normalize_caseless(text: str) -> str:
-    return unicodedata.normalize("NFKD", text.casefold())
+    return normalize("NFKD", text.casefold())
 
 
 def caseless_equal(left, right) -> bool:
     return normalize_caseless(left) == normalize_caseless(right)
 
 
-def caseless_text_in_texts(text: str, texts: typing.Iterable[str]) -> bool:
+def caseless_text_in_texts(text: str, texts: Iterable[str]) -> bool:
     normalized_set = {normalize_caseless(t) for t in texts}
     normalized_text = normalize_caseless(text)
     return normalized_text in normalized_set
 
 
-def expand_replacing_spaces_and_underscores(texts: typing.Iterable[str]) -> set[str]:
+def expand_replacing_spaces_and_underscores(texts: Iterable[str]) -> set[str]:
     expanded = set(texts)
     expanded = expanded.union({t.replace("_", " ") for t in texts})
     expanded = expanded.union({t.replace(" ", "_") for t in texts})
     return expanded
 
 
-def first_not_none(*args: T) -> typing.Optional[T]:
+def first_not_none(*args: T) -> Optional[T]:
     for i in args:
         if i is not None:
             return i

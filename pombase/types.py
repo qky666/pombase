@@ -1,5 +1,5 @@
 from __future__ import annotations
-import typing
+from typing import Union
 
 # Type alias
-Number = typing.Union[int, float]
+Number = Union[int, float]

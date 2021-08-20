@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from overrides import overrides
-from pombase.web_node import types
+from pombase.types import Number
 from pages.toolsqa.web_concept_page import WebConceptPage
 
 
@@ -15,7 +15,7 @@ class ElementsPage(WebConceptPage):
 
     @overrides
     def wait_until_loaded_succeeded(self,
-                                    timeout: types.Number = None,
+                                    timeout: Number = None,
                                     raise_error: bool = True,
                                     force_count_not_zero: bool = True, ) -> bool:
         if super().wait_until_loaded_succeeded(timeout=timeout,

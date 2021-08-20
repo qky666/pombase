@@ -1,41 +1,41 @@
 from __future__ import annotations
-import typing
-import _pytest.config as pt_config
+from typing import Optional
+from _pytest.config import Config as PytestConfig
 # noinspection PyPackageRequirements
-import src.testproject.enums as tp_enums
+from src.testproject.enums import SleepTimingType, TakeScreenshotConditionType
 # noinspection PyPackageRequirements
-import src.testproject.enums.report_type as report_type
+from src.testproject.enums.report_type import ReportType
 
 import pombase.pytest_plugin as pytest_plugin
 import pombase.constant as constants
 
 
-class Config:
+class PombaseConfig:
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(Config, cls).__new__(cls)
+            cls._instance = super(PombaseConfig, cls).__new__(cls)
             # Init instance
             cls._instance._pytest_config = None
         return cls._instance
 
     @property
-    def pytest_config(self) -> typing.Optional[pt_config.Config]:
+    def pytest_config(self) -> Optional[PytestConfig]:
         return self._pytest_config
 
     # noinspection PyAttributeOutsideInit
     @pytest_config.setter
-    def pytest_config(self, c: pt_config.Config) -> None:
+    def pytest_config(self, c: PytestConfig) -> None:
         self._pytest_config = c
 
     @property
-    def tp_dev_token(self) -> typing.Optional[str]:
+    def tp_dev_token(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_DEV_TOKEN
         return v.ini_value(self.pytest_config)
 
     @property
-    def tp_agent_url(self) -> typing.Optional[str]:
+    def tp_agent_url(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_AGENT_URL
         return v.ini_value(self.pytest_config)
 
@@ -52,24 +52,24 @@ class Config:
         return int(value)
 
     @property
-    def tp_default_sleep_timing_type(self) -> typing.Optional[tp_enums.SleepTimingType]:
+    def tp_default_sleep_timing_type(self) -> Optional[SleepTimingType]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_DEFAULT_SLEEP_TIMING_TYPE
         value = v.ini_value(self.pytest_config)
         return constants.TP_SLEEP_TIMING_TYPE[value] if value is not None else None
 
     @property
-    def tp_default_take_screenshot_condition_type(self) -> tp_enums.TakeScreenshotConditionType:
+    def tp_default_take_screenshot_condition_type(self) -> TakeScreenshotConditionType:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_DEFAULT_TAKE_SCREENSHOT_CONDITION_TYPE
         value = v.ini_value(self.pytest_config)
         return constants.TP_TAKE_SCREENSHOT_CONDITION_TYPE[value]
 
     @property
-    def tp_project_name(self) -> typing.Optional[str]:
+    def tp_project_name(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_PROJECT_NAME
         return v.ini_value(self.pytest_config)
 
     @property
-    def tp_job_name(self) -> typing.Optional[str]:
+    def tp_job_name(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_JOB_NAME
         return v.ini_value(self.pytest_config)
 
@@ -79,17 +79,17 @@ class Config:
         return v.ini_value(self.pytest_config)
 
     @property
-    def tp_report_type(self) -> report_type.ReportType:
+    def tp_report_type(self) -> ReportType:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_REPORT_TYPE
         value = v.ini_value(self.pytest_config)
         return constants.TP_REPORT_TYPE[value]
 
     @property
-    def tp_report_name(self) -> typing.Optional[str]:
+    def tp_report_name(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_REPORT_NAME
         return v.ini_value(self.pytest_config)
 
     @property
-    def tp_report_path(self) -> typing.Optional[str]:
+    def tp_report_path(self) -> Optional[str]:
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_REPORT_PATH
         return v.ini_value(self.pytest_config)

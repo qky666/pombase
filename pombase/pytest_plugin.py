@@ -1,27 +1,27 @@
 from __future__ import annotations
-import typing
-import pytest
-import _pytest.config as pt_config
-import _pytest.fixtures as pt_fixtures
+from typing import Optional, Literal, Union
+from pytest import fixture
+from _pytest.config import Config as PytestConfig, argparsing
+from _pytest.fixtures import FixtureRequest
 import os
-import enum
-import overrides
-import seleniumbase.config as sb_config
+from enum import unique, Enum
+from overrides import overrides
+from seleniumbase.config import _sb_node
 # noinspection PyPackageRequirements
-import src.testproject.enums as tp_enums
+from src.testproject.enums import EnvironmentVariable as EnumsEnvironmentVariable
 # noinspection PyPackageRequirements
-import src.testproject.enums.environmentvariable as environmentvariable
+from src.testproject.enums.environmentvariable import EnvironmentVariable as EnvVarEnvironmentVariable
 
 import pombase.constant as constants
-import pombase.config as pb_config
-import pombase.pom_base_case as pom_base_case
-import pombase.util as util
+import pombase.pombase_config as pb_config
+import pombase.pombase_case as pombase_case
+import pombase.util as pb_util
 
-PytestVariableType = typing.Literal['string', 'pathlist', 'args', 'linelist', 'bool']
+PytestVariableType = Literal['string', 'pathlist', 'args', 'linelist', 'bool']
 
 
-@enum.unique
-class PytestVar(enum.Enum):
+@unique
+class PytestVar(Enum):
     """Enumeration of environment variable names used"""
 
     TP_DEV_TOKEN: PytestVar = ("TP_DEV_TOKEN", "TestProject developer token", "string", None)
@@ -52,19 +52,19 @@ class PytestVar(enum.Enum):
         "failure",
     )
     TP_PROJECT_NAME: PytestVar = (
-        tp_enums.EnvironmentVariable.TP_PROJECT_NAME.value,
+        EnumsEnvironmentVariable.TP_PROJECT_NAME.value,
         "TestProject project name",
         "string",
         None,
     )
     TP_JOB_NAME: PytestVar = (
-        tp_enums.EnvironmentVariable.TP_JOB_NAME.value,
+        EnumsEnvironmentVariable.TP_JOB_NAME.value,
         "TestProject job name",
         "string",
         None,
     )
     TP_DISABLE_AUTO_REPORTING: PytestVar = (
-        tp_enums.EnvironmentVariable.TP_DISABLE_AUTO_REPORTING.value,
+        EnumsEnvironmentVariable.TP_DISABLE_AUTO_REPORTING.value,
         "Disable all reports in TestProject",
         "bool",
         False,
@@ -91,7 +91,7 @@ class PytestVar(enum.Enum):
     def __init__(self, var_name: str,
                  help_text: str,
                  var_type: PytestVariableType,
-                 default_value: typing.Optional[str]):
+                 default_value: Optional[str]):
         self.var_name = var_name
         self.help_text = help_text
         self.var_type = var_type
@@ -112,15 +112,15 @@ class PytestVar(enum.Enum):
         except KeyError:
             pass
 
-    def env_value(self) -> typing.Optional[str]:
+    def env_value(self) -> Optional[str]:
         v = os.environ.get(self.env_var_name, None)
         return v if v not in constants.ALMOST_NONE else None
 
-    def ini_value(self, config: pt_config.Config) -> typing.Union[str, list, list[str], bool]:
+    def ini_value(self, config: PytestConfig) -> Union[str, list, list[str], bool]:
         v = config.getini(self.ini_name)
         return v if v not in constants.ALMOST_NONE else None
 
-    def addini(self, parser: pt_config.argparsing.Parser) -> None:
+    def addini(self, parser: argparsing.Parser) -> None:
         kwargs = {}
         env_var_value = self.env_value()
         default = env_var_value if env_var_value is not None else self.default_value
@@ -138,29 +138,29 @@ class PytestVar(enum.Enum):
         parser.addini(self.ini_name, help=self.help_text, type=self.var_type, **kwargs)
 
 
-def pytest_addoption(parser: pt_config.argparsing.Parser) -> None:
+def pytest_addoption(parser: argparsing.Parser) -> None:
     for pytest_var in PytestVar:
         pytest_var: PytestVar
         pytest_var.addini(parser)
 
 
-def pytest_configure(config: pt_config.Config) -> None:
-    pb_config.Config().pytest_config = config
+def pytest_configure(config: PytestConfig) -> None:
+    pb_config.PombaseConfig().pytest_config = config
 
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
-@pytest.fixture()
-def pb(request: pt_fixtures.FixtureRequest):
+@fixture()
+def pb(request: FixtureRequest):
     """PomBase as a pytest fixture.
     Usage example: "def test_one(pb):"
     You may need to use this for tests that use other pytest fixtures."""
 
-    class BaseClass(pom_base_case.PomBaseCase):
-        @overrides.overrides
+    class BaseClass(pombase_case.PombaseCase):
+        @overrides
         def setUp(self, masterqa_mode=False):
             super().setUp(masterqa_mode)
 
-        @overrides.overrides
+        @overrides
         def tearDown(self):
             self.save_teardown_screenshot()
             super().tearDown()
@@ -171,26 +171,26 @@ def pb(request: pt_fixtures.FixtureRequest):
     # Pombase
     tp_project_name_var: PytestVar = PytestVar.TP_PROJECT_NAME
     tp_job_name_var: PytestVar = PytestVar.TP_JOB_NAME
-    tp_test_name_env_var_name: str = environmentvariable.EnvironmentVariable.TP_TEST_NAME.value
+    tp_test_name_env_var_name: str = EnvVarEnvironmentVariable.TP_TEST_NAME.value
 
     if request.cls:
         # SeleniumBase
         request.cls.sb = BaseClass("base_method")
 
         # PomBase
-        request.cls.sb.tp_project_name = util.first_not_none(
+        request.cls.sb.tp_project_name = pb_util.first_not_none(
             getattr(request.cls, tp_project_name_var.ini_name, None),
             getattr(request.cls, tp_project_name_var.env_var_name, None),
             getattr(request.module, tp_project_name_var.ini_name, None),
             getattr(request.module, tp_project_name_var.env_var_name, None),
         )
-        request.cls.sb.tp_job_name = util.first_not_none(
+        request.cls.sb.tp_job_name = pb_util.first_not_none(
             getattr(request.cls, tp_job_name_var.ini_name, None),
             getattr(request.cls, tp_job_name_var.env_var_name, None),
             getattr(request.module, tp_job_name_var.ini_name, None),
             getattr(request.module, tp_job_name_var.env_var_name, None),
         )
-        test_name_dict = util.first_not_none(
+        test_name_dict = pb_util.first_not_none(
             getattr(request.cls, tp_test_name_env_var_name, None),
             getattr(request.cls, tp_test_name_env_var_name.lower(), None),
             getattr(request.module, tp_test_name_env_var_name, None),
@@ -207,7 +207,7 @@ def pb(request: pt_fixtures.FixtureRequest):
         request.cls.sb._needs_tearDown = True
         request.cls.sb._using_sb_fixture = True
         request.cls.sb._using_sb_fixture_class = True
-        sb_config._sb_node[request.node.nodeid] = request.cls.sb
+        _sb_node[request.node.nodeid] = request.cls.sb
         yield request.cls.sb
         if request.cls.sb._needs_tearDown:
             request.cls.sb.tearDown()
@@ -217,15 +217,15 @@ def pb(request: pt_fixtures.FixtureRequest):
         sb = BaseClass("base_method")
 
         # PomBase
-        sb.tp_project_name = util.first_not_none(
+        sb.tp_project_name = pb_util.first_not_none(
             getattr(request.module, tp_project_name_var.ini_name, None),
             getattr(request.module, tp_project_name_var.env_var_name, None),
         )
-        sb.tp_job_name = util.first_not_none(
+        sb.tp_job_name = pb_util.first_not_none(
             getattr(request.module, tp_job_name_var.ini_name, None),
             getattr(request.module, tp_job_name_var.env_var_name, None),
         )
-        test_name_dict = util.first_not_none(
+        test_name_dict = pb_util.first_not_none(
             getattr(request.module, tp_test_name_env_var_name, None),
             getattr(request.module, tp_test_name_env_var_name.lower(), None),
         )
@@ -240,7 +240,7 @@ def pb(request: pt_fixtures.FixtureRequest):
         sb._needs_tearDown = True
         sb._using_sb_fixture = True
         sb._using_sb_fixture_no_class = True
-        sb_config._sb_node[request.node.nodeid] = sb
+        _sb_node[request.node.nodeid] = sb
         yield sb
         if sb._needs_tearDown:
             sb.tearDown()

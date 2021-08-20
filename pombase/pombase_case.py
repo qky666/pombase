@@ -1,38 +1,39 @@
 from __future__ import annotations
-import typing
+from typing import Optional, Union
 import os
-import overrides
-import selenium.webdriver.remote.webdriver as webdriver
-import seleniumbase
-import seleniumbase.config.settings as sb_settings
-import seleniumbase.core.browser_launcher as browser_launcher
-import seleniumbase.core.download_helper as download_helper
-import seleniumbase.fixtures.constants as sb_constants
-import seleniumbase.fixtures.page_utils as page_utils
-import selenium.webdriver.common.desired_capabilities as desired_capabilities
-import selenium.webdriver.ie.options as selenium_ie_options
-import selenium.webdriver.support.select as selenium_select
-import selenium.webdriver.remote.webelement as webelement
+from overrides import overrides, EnforceOverrides
+from selenium.webdriver.remote.webdriver import WebDriver
+from seleniumbase import BaseCase
+from seleniumbase.config.settings import HEADLESS_START_WIDTH, HEADLESS_START_HEIGHT, CHROME_START_WIDTH, \
+    CHROME_START_HEIGHT
+from seleniumbase.core.browser_launcher import validate_proxy_string, _set_firefox_options, \
+    _add_chrome_disable_csp_extension, _add_chrome_proxy_extension, _set_safari_capabilities, _set_chrome_options
+from seleniumbase.core.download_helper import get_downloads_folder
+from seleniumbase.fixtures.constants import Browser
+from seleniumbase.fixtures.page_utils import is_valid_url
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.ie.options import Options
+from selenium.webdriver.support.select import Select
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
-import msedge.selenium_tools as edge_tools
+from msedge.selenium_tools import EdgeOptions
 # noinspection PyPackageRequirements
-import src.testproject.classes as tp_classes
+from src.testproject.classes import StepSettings
 # noinspection PyPackageRequirements
-import src.testproject.enums as tp_enums
+from src.testproject.enums import SleepTimingType, TakeScreenshotConditionType
 # noinspection PyPackageRequirements
-import src.testproject.enums.environmentvariable as environmentvariable
+from src.testproject.enums.environmentvariable import EnvironmentVariable
 
-import pombase.web_node
 import pombase.webdriver as pb_webdriver
-import pombase.config as pb_config
+import pombase.pombase_config as pb_config
 import pombase.constant as constants
-import pombase.util as util
+import pombase.util as pb_util
 import pombase.web_node as web_node
-import pombase.types as types
+import pombase.types as pb_types
 
 
-def auth_user_pass(proxy_string: typing.Optional[str],
-                   browser_name: str) -> tuple[bool, typing.Optional[str], typing.Optional[str]]:
+def auth_user_pass(proxy_string: Optional[str],
+                   browser_name: str) -> tuple[bool, Optional[str], Optional[str]]:
     proxy_auth = False
     proxy_user = None
     proxy_pass = None
@@ -50,34 +51,34 @@ def auth_user_pass(proxy_string: typing.Optional[str],
                     'is: "username:password@hostname:port". If using a proxy '
                     'server without auth, the format is: "hostname:port".'
                 )
-            if browser_name != sb_constants.Browser.GOOGLE_CHROME and (
-                    browser_name != sb_constants.Browser.EDGE
+            if browser_name != Browser.GOOGLE_CHROME and (
+                    browser_name != Browser.EDGE
             ):
                 raise Exception(
                     "Chrome or Edge is required when using a proxy server "
                     "that has authentication! (If using a proxy server "
                     "without auth, Chrome, Edge, or Firefox may be used.)"
                 )
-        proxy_string = browser_launcher.validate_proxy_string(proxy_string)
+        proxy_string = validate_proxy_string(proxy_string)
         if proxy_string and proxy_user and proxy_pass:
             proxy_auth = True
     return proxy_auth, proxy_user, proxy_pass
 
 
-def recalculate_selector_by(selector: typing.Union[str, web_node.GenericNode], by: str = None):
+def recalculate_selector_by(selector: Union[str, web_node.GenericNode], by: str = None):
     if isinstance(selector, web_node.GenericNode):
         return selector.compound_locator.selector, selector.compound_locator.by
     elif by is None:
-        return selector, pombase.web_node.infer_by_from_selector(selector)
-    elif by == By.CSS_SELECTOR and pombase.web_node.infer_by_from_selector(selector) == By.XPATH:
+        return selector, web_node.infer_by_from_selector(selector)
+    elif by == By.CSS_SELECTOR and web_node.infer_by_from_selector(selector) == By.XPATH:
         return selector, By.XPATH
     else:
         return selector, by
 
 
-class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
+class PombaseCase(BaseCase, EnforceOverrides):
 
-    @overrides.overrides
+    @overrides
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tp_project_name = None
@@ -85,11 +86,11 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
         self.tp_test_name = None
 
     @property
-    def pbconfig(self) -> pb_config.Config:
-        return pb_config.Config()
+    def pbconfig(self) -> pb_config.PombaseConfig:
+        return pb_config.PombaseConfig()
 
     # noinspection PyUnresolvedReferences
-    @overrides.overrides
+    @overrides
     def get_new_driver(self,
                        browser=None,
                        headless=None,
@@ -128,56 +129,56 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
         token = self.pbconfig.tp_dev_token
         if token is not None:
             self._BaseCase__check_scope()
-            browser = util.first_not_none(browser, self.browser)
+            browser = pb_util.first_not_none(browser, self.browser)
             browser_name = browser
-            headless = util.first_not_none(headless, self.headless)
-            locale_code = util.first_not_none(locale_code, self.locale_code)
+            headless = pb_util.first_not_none(headless, self.headless)
+            locale_code = pb_util.first_not_none(locale_code, self.locale_code)
             # protocol = util.first_not_none(protocol, self.protocol)
-            servername = util.first_not_none(servername, self.servername)
+            servername = pb_util.first_not_none(servername, self.servername)
             # port = util.first_not_none(port, self.port)
             # use_grid = False
             # if servername != "localhost":
             #     # Use Selenium Grid (Use "127.0.0.1" for localhost Grid)
             #     use_grid = True
-            proxy_string = util.first_not_none(proxy, self.proxy_string)
-            user_agent = util.first_not_none(agent, self.user_agent)
-            disable_csp = util.first_not_none(disable_csp, self.disable_csp)
-            enable_ws = util.first_not_none(enable_ws, self.enable_ws)
-            enable_sync = util.first_not_none(enable_sync, self.enable_sync)
-            use_auto_ext = util.first_not_none(use_auto_ext, self.use_auto_ext)
-            no_sandbox = util.first_not_none(no_sandbox, self.no_sandbox)
-            disable_gpu = util.first_not_none(disable_gpu, self.disable_gpu)
-            incognito = util.first_not_none(incognito, self.incognito)
-            guest_mode = util.first_not_none(guest_mode, self.guest_mode)
-            devtools = util.first_not_none(devtools, self.devtools)
-            remote_debug = util.first_not_none(remote_debug, self.remote_debug)
-            swiftshader = util.first_not_none(swiftshader, self.swiftshader)
-            block_images = util.first_not_none(block_images, self.block_images)
-            chromium_arg = util.first_not_none(chromium_arg, self.chromium_arg)
-            firefox_arg = util.first_not_none(firefox_arg, self.firefox_arg)
-            firefox_pref = util.first_not_none(firefox_pref, self.firefox_pref)
-            user_data_dir = util.first_not_none(user_data_dir, self.user_data_dir)
-            extension_zip = util.first_not_none(extension_zip, self.extension_zip)
-            extension_dir = util.first_not_none(extension_dir, self.extension_dir)
+            proxy_string = pb_util.first_not_none(proxy, self.proxy_string)
+            user_agent = pb_util.first_not_none(agent, self.user_agent)
+            disable_csp = pb_util.first_not_none(disable_csp, self.disable_csp)
+            enable_ws = pb_util.first_not_none(enable_ws, self.enable_ws)
+            enable_sync = pb_util.first_not_none(enable_sync, self.enable_sync)
+            use_auto_ext = pb_util.first_not_none(use_auto_ext, self.use_auto_ext)
+            no_sandbox = pb_util.first_not_none(no_sandbox, self.no_sandbox)
+            disable_gpu = pb_util.first_not_none(disable_gpu, self.disable_gpu)
+            incognito = pb_util.first_not_none(incognito, self.incognito)
+            guest_mode = pb_util.first_not_none(guest_mode, self.guest_mode)
+            devtools = pb_util.first_not_none(devtools, self.devtools)
+            remote_debug = pb_util.first_not_none(remote_debug, self.remote_debug)
+            swiftshader = pb_util.first_not_none(swiftshader, self.swiftshader)
+            block_images = pb_util.first_not_none(block_images, self.block_images)
+            chromium_arg = pb_util.first_not_none(chromium_arg, self.chromium_arg)
+            firefox_arg = pb_util.first_not_none(firefox_arg, self.firefox_arg)
+            firefox_pref = pb_util.first_not_none(firefox_pref, self.firefox_pref)
+            user_data_dir = pb_util.first_not_none(user_data_dir, self.user_data_dir)
+            extension_zip = pb_util.first_not_none(extension_zip, self.extension_zip)
+            extension_dir = pb_util.first_not_none(extension_dir, self.extension_dir)
             # test_id = self.__get_test_id()
             # cap_file = util.first_not_none(cap_file, self.cap_file)
             # cap_string = util.first_not_none(cap_string, self.cap_string)
-            is_mobile = util.first_not_none(is_mobile, self.mobile_emulator)
+            is_mobile = pb_util.first_not_none(is_mobile, self.mobile_emulator)
             mobile_emulator = is_mobile
-            d_width = util.first_not_none(d_width, self._BaseCase__device_width)
+            d_width = pb_util.first_not_none(d_width, self._BaseCase__device_width)
             device_width = d_width
-            d_height = util.first_not_none(d_height, self._BaseCase__device_height)
+            d_height = pb_util.first_not_none(d_height, self._BaseCase__device_height)
             device_height = d_height
-            d_p_r = util.first_not_none(d_p_r, self._BaseCase__device_pixel_ratio)
+            d_p_r = pb_util.first_not_none(d_p_r, self._BaseCase__device_pixel_ratio)
             device_pixel_ratio = d_p_r
 
             proxy_auth, proxy_user, proxy_pass = auth_user_pass(proxy_string, browser_name)
-            downloads_path = download_helper.get_downloads_folder()
+            downloads_path = get_downloads_folder()
 
             driver_class = constants.TP_DRIVER_CLASS[browser]
             driver_kwargs = {}
             if driver_class == pb_webdriver.Firefox:
-                firefox_options = browser_launcher._set_firefox_options(
+                firefox_options = _set_firefox_options(
                     downloads_path=downloads_path,
                     headless=headless,
                     locale_code=locale_code,
@@ -187,7 +188,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                     firefox_arg=firefox_arg,
                     firefox_pref=firefox_pref,
                 )
-                firefox_capabilities = desired_capabilities.DesiredCapabilities.FIREFOX.copy()
+                firefox_capabilities = DesiredCapabilities.FIREFOX.copy()
                 if headless:
                     firefox_capabilities["moz:firefoxOptions"] = {
                         "args": ["-headless"]
@@ -195,7 +196,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 driver_kwargs["firefox_options"] = firefox_options
                 driver_kwargs["desired_capabilities"] = firefox_capabilities
             elif driver_class == pb_webdriver.Ie:
-                ie_options = selenium_ie_options.Options()
+                ie_options = Options()
                 ie_options.ignore_protected_mode_settings = True
                 ie_options.ignore_zoom_level = True
                 ie_options.require_window_focus = False
@@ -224,7 +225,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                     "profile.default_content_setting_values.automatic_downloads": 1,
                 }
 
-                edge_options = edge_tools.EdgeOptions()
+                edge_options = EdgeOptions()
                 edge_options.use_chromium = True
                 if locale_code:
                     prefs["intl.accept_languages"] = locale_code
@@ -292,14 +293,14 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 edge_options.add_argument("--dom-automation")
                 edge_options.add_argument("--disable-hang-monitor")
                 edge_options.add_argument("--disable-prompt-on-repost")
-                if (sb_settings.DISABLE_CSP_ON_CHROME or disable_csp) and not headless:
+                if (DISABLE_CSP_ON_CHROME or disable_csp) and not headless:
                     # Headless Edge doesn't support extensions, which are required
                     # for disabling the Content Security Policy on Edge
-                    edge_options = browser_launcher._add_chrome_disable_csp_extension(edge_options)
+                    edge_options = _add_chrome_disable_csp_extension(edge_options)
                     edge_options.add_argument("--enable-sync")
                 if proxy_string:
                     if proxy_auth:
-                        edge_options = browser_launcher._add_chrome_proxy_extension(
+                        edge_options = _add_chrome_proxy_extension(
                             edge_options, proxy_string, proxy_user, proxy_pass
                         )
                     edge_options.add_argument("--proxy-server=%s" % proxy_string)
@@ -340,14 +341,14 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 capabilities["platform"] = ""
                 driver_kwargs["capabilities"] = capabilities
             elif driver_class == pb_webdriver.Safari:
-                safari_capabilities = browser_launcher._set_safari_capabilities()
+                safari_capabilities = _set_safari_capabilities()
                 driver_kwargs["desired_capabilities"] = safari_capabilities
             elif driver_class == pb_webdriver.Chrome:
                 if user_data_dir and len(user_data_dir) < 3:
                     raise Exception(
                         "Name length of Chrome's User Data Directory must be >= 3."
                     )
-                chrome_options = browser_launcher._set_chrome_options(
+                chrome_options = _set_chrome_options(
                     browser_name=sb_constants.Browser.GOOGLE_CHROME,
                     downloads_path=downloads_path,
                     headless=headless,
@@ -382,11 +383,11 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 driver_kwargs["chrome_options"] = chrome_options
 
             if self.tp_test_name is not None:
-                os.environ[environmentvariable.EnvironmentVariable.TP_TEST_NAME.value] = self.tp_test_name
+                os.environ[EnvironmentVariable.TP_TEST_NAME.value] = self.tp_test_name
             new_driver = driver_class(
                 token=token,
-                project_name=util.first_not_none(self.tp_project_name, self.pbconfig.tp_project_name),
-                job_name=util.first_not_none(self.tp_job_name, self.pbconfig.tp_job_name),
+                project_name=pb_util.first_not_none(self.tp_project_name, self.pbconfig.tp_project_name),
+                job_name=pb_util.first_not_none(self.tp_job_name, self.pbconfig.tp_job_name),
                 agent_url=self.pbconfig.tp_agent_url,
                 disable_reports=self.pbconfig.tp_disable_auto_reporting,
                 report_type=self.pbconfig.tp_report_type,
@@ -431,17 +432,17 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                                           d_height,
                                           d_p_r, )
 
-    def _handle_new_driver(self, new_driver: webdriver.WebDriver, browser_name: str, switch_to: bool) -> None:
+    def _handle_new_driver(self, new_driver: WebDriver, browser_name: str, switch_to: bool) -> None:
         self._drivers_list.append(new_driver)
         # noinspection PyUnresolvedReferences
         self._BaseCase__driver_browser_map[new_driver] = browser_name
         if switch_to:
-            self.driver: webdriver.WebDriver = new_driver
+            self.driver: WebDriver = new_driver
             self.browser = browser_name
             if self.headless:
                 # Make sure the invisible browser window is big enough
-                width = sb_settings.HEADLESS_START_WIDTH
-                height = sb_settings.HEADLESS_START_HEIGHT
+                width = HEADLESS_START_WIDTH
+                height = HEADLESS_START_HEIGHT
                 # noinspection PyBroadException,TryExceptPass
                 try:
                     self.driver.set_window_size(width, height)
@@ -453,8 +454,8 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                     pass
             else:
                 if self.browser == "chrome" or self.browser == "edge":
-                    width = sb_settings.CHROME_START_WIDTH
-                    height = sb_settings.CHROME_START_HEIGHT
+                    width = CHROME_START_WIDTH
+                    height = CHROME_START_HEIGHT
                     # noinspection PyBroadException,TryExceptPass
                     try:
                         if self.maximize_option:
@@ -465,7 +466,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                     except Exception:
                         pass  # Keep existing browser resolution
                 elif self.browser == "firefox":
-                    width = sb_settings.CHROME_START_WIDTH
+                    width = CHROME_START_WIDTH
                     # noinspection PyBroadException,TryExceptPass
                     try:
                         if self.maximize_option:
@@ -476,7 +477,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                     except Exception:
                         pass  # Keep existing browser resolution
                 elif self.browser == "safari":
-                    width = sb_settings.CHROME_START_WIDTH
+                    width = CHROME_START_WIDTH
                     if self.maximize_option:
                         # noinspection PyBroadException,TryExceptPass
                         try:
@@ -506,15 +507,15 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 #         except Exception:
                 #             pass
             if self.start_page and len(self.start_page) >= 4:
-                if page_utils.is_valid_url(self.start_page):
+                if is_valid_url(self.start_page):
                     self.open(self.start_page)
                 else:
                     new_start_page = "http://" + self.start_page
-                    if page_utils.is_valid_url(new_start_page):
+                    if is_valid_url(new_start_page):
                         self.open(new_start_page)
 
             # Apply default settings
-            step_settings = tp_classes.StepSettings(
+            step_settings = StepSettings(
                 timeout=self.pbconfig.tp_default_timeout,
                 sleep_time=self.pbconfig.tp_default_sleep_time,
                 sleep_timing_type=self.pbconfig.tp_default_sleep_timing_type,
@@ -523,10 +524,10 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             previous_settings = new_driver.command_executor.settings
             # If inherit take the previous step settings.
             if step_settings.sleep_timing_type \
-                    and step_settings.sleep_timing_type is tp_enums.SleepTimingType.Inherit:
+                    and step_settings.sleep_timing_type is SleepTimingType.Inherit:
                 step_settings.sleep_timing_type = previous_settings.sleep_timing_type
             if step_settings.screenshot_condition \
-                    and step_settings.screenshot_condition is tp_enums.TakeScreenshotConditionType.Inherit:
+                    and step_settings.screenshot_condition is TakeScreenshotConditionType.Inherit:
                 step_settings.screenshot_condition = previous_settings.screenshot_condition
             new_driver.command_executor.settings = step_settings
 
@@ -534,7 +535,7 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
     # New methods
     ##############
 
-    def count(self, selector: typing.Union[str, web_node.GenericNode], by: str = None) -> int:
+    def count(self, selector: Union[str, web_node.GenericNode], by: str = None) -> int:
         node = web_node.node_from(selector, by)
         if node.ignore_invisible is True:
             return len(self.find_visible_elements(node))
@@ -542,498 +543,498 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
             return len(self.find_elements(node))
 
     def is_iframe(self,
-                  selector: typing.Union[str, web_node.GenericNode],
+                  selector: Union[str, web_node.GenericNode],
                   by: str = None,
-                  timeout: types.Number = None) -> bool:
+                  timeout: pb_types.Number = None) -> bool:
         selector, by = recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
         if element is None:
             return False
         tag_name = element.tag_name
-        if isinstance(tag_name, str) and util.caseless_equal(tag_name, "iframe"):
+        if isinstance(tag_name, str) and pb_util.caseless_equal(tag_name, "iframe"):
             return True
         else:
             return False
 
     def get_tag_name(self,
-                     selector: typing.Union[str, web_node.GenericNode],
+                     selector: Union[str, web_node.GenericNode],
                      by: str = None,
-                     timeout: typing.Union[int, float] = None) -> str:
+                     timeout: Union[int, float] = None) -> str:
         selector, by = recalculate_selector_by(selector, by)
         element = self.get_element(selector, by, timeout)
         return element.tag_name
 
     def get_selected_options(self,
-                             selector: typing.Union[str, web_node.GenericNode],
+                             selector: Union[str, web_node.GenericNode],
                              by: str = None,
-                             timeout: typing.Union[int, float] = None, ) -> list[str]:
+                             timeout: Union[int, float] = None, ) -> list[str]:
         selector, by = recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
-        select = selenium_select.Select(element)
-        selected: list[webelement.WebElement] = select.all_selected_options
+        select = Select(element)
+        selected: list[WebElement] = select.all_selected_options
         return [item.text for item in selected]
 
     def deselect_all_options(self,
-                             selector: typing.Union[str, web_node.GenericNode],
+                             selector: Union[str, web_node.GenericNode],
                              by: str = None,
-                             timeout: typing.Union[int, float] = None, ) -> None:
+                             timeout: Union[int, float] = None, ) -> None:
         selector, by = recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
-        select = selenium_select.Select(element)
+        select = Select(element)
         select.deselect_all()
 
     #######################
     # SeleniumBase actions
     #######################
 
-    @overrides.overrides
+    @overrides
     def click(self, selector, by=By.CSS_SELECTOR, timeout=None, delay=0):
         selector, by = recalculate_selector_by(selector, by)
         super().click(selector, by, timeout, delay)
 
-    @overrides.overrides
+    @overrides
     def slow_click(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().slow_click(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def double_click(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().double_click(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def click_chain(self, selectors_list, by=By.CSS_SELECTOR, timeout=None, spacing=0):
         if isinstance(selectors_list, web_node.GenericNode):
             selectors_list, by = [selectors_list.locator.selector], selectors_list.locator.by
         super().click_chain(selectors_list, by, timeout, spacing)
 
-    @overrides.overrides
+    @overrides
     def update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
         selector, by = recalculate_selector_by(selector, by)
         super().update_text(selector, text, by, timeout, retry)
 
-    @overrides.overrides
+    @overrides
     def add_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().add_text(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def type(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
         selector, by = recalculate_selector_by(selector, by)
         super().type(selector, text, by, timeout, retry)
 
-    @overrides.overrides
+    @overrides
     def submit(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().submit(selector, by)
 
-    @overrides.overrides
+    @overrides
     def clear(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().clear(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def focus(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().focus(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def is_element_present(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_element_present(selector, by)
 
-    @overrides.overrides
+    @overrides
     def is_element_visible(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_element_visible(selector, by)
 
-    @overrides.overrides
+    @overrides
     def is_element_enabled(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_element_enabled(selector, by)
 
-    @overrides.overrides
+    @overrides
     def is_text_visible(self, text, selector="html", by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_text_visible(text, selector, by)
 
-    @overrides.overrides
+    @overrides
     def get_text(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().get_text(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def get_attribute(self, selector, attribute, by=By.CSS_SELECTOR, timeout=None, hard_fail=True):
         selector, by = recalculate_selector_by(selector, by)
         return super().get_attribute(selector, attribute, by, timeout, hard_fail)
 
-    @overrides.overrides
+    @overrides
     def set_attribute(self, selector, attribute, value, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().set_attribute(selector, attribute, value, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def set_attributes(self, selector, attribute, value, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().set_attributes(selector, attribute, value, by)
 
-    @overrides.overrides
+    @overrides
     def set_attribute_all(self, selector, attribute, value, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().set_attribute_all(selector, attribute, value, by)
 
-    @overrides.overrides
+    @overrides
     def remove_attribute(self, selector, attribute, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().remove_attribute(selector, attribute, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def remove_attributes(self, selector, attribute, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().remove_attributes(selector, attribute, by)
 
-    @overrides.overrides
+    @overrides
     def get_property_value(self, selector, property, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().get_property_value(selector, property, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def get_image_url(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().get_image_url(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def find_elements(self, selector, by=By.CSS_SELECTOR, limit=0):
         selector, by = recalculate_selector_by(selector, by)
         return super().find_elements(selector, by, limit)
 
-    @overrides.overrides
+    @overrides
     def find_visible_elements(self, selector, by=By.CSS_SELECTOR, limit=0):
         selector, by = recalculate_selector_by(selector, by)
         return super().find_visible_elements(selector, by, limit)
 
-    @overrides.overrides
+    @overrides
     def click_visible_elements(self, selector, by=By.CSS_SELECTOR, limit=0, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().click_visible_elements(selector, by, limit, timeout)
 
-    @overrides.overrides
+    @overrides
     def click_nth_visible_element(self, selector, number, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().click_nth_visible_element(selector, number, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def click_if_visible(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().click_if_visible(selector, by)
 
-    @overrides.overrides
+    @overrides
     def is_checked(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_checked(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def is_selected(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_selected(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def check_if_unchecked(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().check_if_unchecked(selector, by)
 
-    @overrides.overrides
+    @overrides
     def select_if_unselected(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().select_if_unselected(selector, by)
 
-    @overrides.overrides
+    @overrides
     def uncheck_if_checked(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().uncheck_if_checked(selector, by)
 
-    @overrides.overrides
+    @overrides
     def unselect_if_selected(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().unselect_if_selected(selector, by)
 
-    @overrides.overrides
+    @overrides
     def is_element_in_an_iframe(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().is_element_in_an_iframe(selector, by)
 
-    @overrides.overrides
+    @overrides
     def switch_to_frame_of_element(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         return super().switch_to_frame_of_element(selector, by)
 
-    @overrides.overrides
+    @overrides
     def hover_on_element(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().hover_on_element(selector, by)
 
-    @overrides.overrides
+    @overrides
     def hover_and_click(self, hover_selector, click_selector, hover_by=By.CSS_SELECTOR, click_by=By.CSS_SELECTOR,
                         timeout=None):
         hover_selector, hover_by = recalculate_selector_by(hover_selector, hover_by)
         click_selector, click_by = recalculate_selector_by(click_selector, click_by)
         return super().hover_and_click(hover_selector, click_selector, hover_by, click_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def hover_and_double_click(self, hover_selector, click_selector, hover_by=By.CSS_SELECTOR, click_by=By.CSS_SELECTOR,
                                timeout=None):
         hover_selector, hover_by = recalculate_selector_by(hover_selector, hover_by)
         click_selector, click_by = recalculate_selector_by(click_selector, click_by)
         return super().hover_and_double_click(hover_selector, click_selector, hover_by, click_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def drag_and_drop(self, drag_selector, drop_selector, drag_by=By.CSS_SELECTOR, drop_by=By.CSS_SELECTOR,
                       timeout=None):
         drag_selector, drag_by = recalculate_selector_by(drag_selector, drag_by)
         drop_selector, drop_by = recalculate_selector_by(drop_selector, drop_by)
         return super().drag_and_drop(drag_selector, drop_selector, drag_by, drop_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def drag_and_drop_with_offset(self, selector, x, y, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().drag_and_drop_with_offset(selector, x, y, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def select_option_by_text(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
         dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_text(dropdown_selector, option, dropdown_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def select_option_by_index(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
         dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_index(dropdown_selector, option, dropdown_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def select_option_by_value(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
         dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_value(dropdown_selector, option, dropdown_by, timeout)
 
-    @overrides.overrides
+    @overrides
     def switch_to_frame(self, frame, timeout=None):
         frame, _ = recalculate_selector_by(frame)
         super().switch_to_frame(frame, timeout)
 
-    @overrides.overrides
+    @overrides
     def bring_to_front(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().bring_to_front(selector, by)
 
-    @overrides.overrides
+    @overrides
     def highlight_click(self, selector, by=By.CSS_SELECTOR, loops=3, scroll=True):
         selector, by = recalculate_selector_by(selector, by)
         super().highlight_click(selector, by, loops, scroll)
 
-    @overrides.overrides
+    @overrides
     def highlight_update_text(self, selector, text, by=By.CSS_SELECTOR, loops=3, scroll=True):
         selector, by = recalculate_selector_by(selector, by)
         super().highlight_update_text(selector, text, by, loops, scroll)
 
-    @overrides.overrides
+    @overrides
     def highlight(self, selector, by=By.CSS_SELECTOR, loops=None, scroll=True):
         selector, by = recalculate_selector_by(selector, by)
         super().highlight(selector, by, loops, scroll)
 
-    @overrides.overrides
+    @overrides
     def press_up_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().press_up_arrow(selector, times, by)
 
-    @overrides.overrides
+    @overrides
     def press_down_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().press_down_arrow(selector, times, by)
 
-    @overrides.overrides
+    @overrides
     def press_left_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().press_left_arrow(selector, times, by)
 
-    @overrides.overrides
+    @overrides
     def press_right_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().press_right_arrow(selector, times, by)
 
-    @overrides.overrides
+    @overrides
     def scroll_to(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().scroll_to(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def scroll_to_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().scroll_to_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def slow_scroll_to(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().slow_scroll_to(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def slow_scroll_to_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().slow_scroll_to_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def js_click(self, selector, by=By.CSS_SELECTOR, all_matches=False):
         selector, by = recalculate_selector_by(selector, by)
         super().js_click(selector, by, all_matches)
 
-    @overrides.overrides
+    @overrides
     def js_click_all(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().js_click_all(selector, by)
 
-    @overrides.overrides
+    @overrides
     def jquery_click(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().jquery_click(selector, by)
 
-    @overrides.overrides
+    @overrides
     def jquery_click_all(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().jquery_click_all(selector, by)
 
-    @overrides.overrides
+    @overrides
     def hide_element(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().hide_element(selector, by)
 
-    @overrides.overrides
+    @overrides
     def hide_elements(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().hide_elements(selector, by)
 
-    @overrides.overrides
+    @overrides
     def show_element(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().show_element(selector, by)
 
-    @overrides.overrides
+    @overrides
     def show_elements(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().show_elements(selector, by)
 
-    @overrides.overrides
+    @overrides
     def remove_element(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().remove_element(selector, by)
 
-    @overrides.overrides
+    @overrides
     def remove_elements(self, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().remove_elements(selector, by)
 
-    @overrides.overrides
+    @overrides
     def choose_file(self, selector, file_path, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().choose_file(selector, file_path, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def set_value(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().set_value(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def js_update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().js_update_text(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def js_type(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().js_type(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def set_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().set_text(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def jquery_update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().jquery_update_text(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def input(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
         selector, by = recalculate_selector_by(selector, by)
         super().input(selector, text, by, timeout, retry)
 
-    @overrides.overrides
+    @overrides
     def fill(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
         selector, by = recalculate_selector_by(selector, by)
         super().fill(selector, text, by, timeout, retry)
 
-    @overrides.overrides
+    @overrides
     def write(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
         selector, by = recalculate_selector_by(selector, by)
         super().write(selector, text, by, timeout, retry)
 
-    @overrides.overrides
+    @overrides
     def send_keys(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         super().send_keys(selector, text, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element_visible(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element_not_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element_not_present(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element_not_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element_not_present(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def post_message_and_highlight(self, message, selector, by=By.CSS_SELECTOR):
         selector, by = recalculate_selector_by(selector, by)
         super().post_message_and_highlight(message, selector, by)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element_present(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def get_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().get_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element_present(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def find_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().find_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element_visible(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_elements(self, *args, **kwargs):
         new_args = []
         for arg in args:
@@ -1049,87 +1050,87 @@ class PomBaseCase(seleniumbase.BaseCase, overrides.EnforceOverrides):
                 new_args.append(arg)
         return super().assert_elements(*new_args, **kwargs)
 
-    @overrides.overrides
+    @overrides
     def wait_for_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_text_visible(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_exact_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_exact_text_visible(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_text(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def find_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().find_text(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_text_visible(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_text(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_exact_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_exact_text(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element_absent(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element_absent(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element_absent(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element_absent(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_element_not_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_element_not_visible(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_element_not_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_element_not_visible(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def wait_for_text_not_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().wait_for_text_not_visible(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def assert_text_not_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().assert_text_not_visible(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def deferred_assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().deferred_assert_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def deferred_assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().deferred_assert_text(text, selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def delayed_assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().delayed_assert_element(selector, by, timeout)
 
-    @overrides.overrides
+    @overrides
     def delayed_assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
         selector, by = recalculate_selector_by(selector, by)
         return super().delayed_assert_text(text, selector, by, timeout)

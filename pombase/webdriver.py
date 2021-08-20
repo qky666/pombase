@@ -1,39 +1,39 @@
 from __future__ import annotations
-import selenium.common.exceptions as selenium_exceptions
+from selenium.common.exceptions import InvalidArgumentException, WebDriverException
 # noinspection PyPackageRequirements
-import src.testproject.sdk.drivers.webdriver as tp_webdriver
+from src.testproject.sdk.drivers import webdriver as tp_webdriver
 # noinspection PyPackageRequirements
-import src.testproject.classes as tp_classes
+from src.testproject.classes import StepSettings, DriverStepSettings
 # noinspection PyPackageRequirements
-import src.testproject.enums as tp_enums
+from src.testproject.enums import TakeScreenshotConditionType
 
-import pombase.types as types
+import pombase.types as tp_types
 
 
 class Chrome(tp_webdriver.Chrome):
-    def set_script_timeout(self, time_to_wait: types.Number) -> None:
-        step_settings = tp_classes.StepSettings(
+    def set_script_timeout(self, time_to_wait: tp_types.Number) -> None:
+        step_settings = StepSettings(
             timeout=int(time_to_wait),
             always_pass=True,
-            screenshot_condition=tp_enums.TakeScreenshotConditionType.Never,
+            screenshot_condition=TakeScreenshotConditionType.Never,
         )
-        with tp_classes.DriverStepSettings(self, step_settings):
+        with DriverStepSettings(self, step_settings):
             try:
                 super().set_script_timeout(time_to_wait)
-            except selenium_exceptions.InvalidArgumentException:
+            except InvalidArgumentException:
                 pass
 
 
 class Firefox(tp_webdriver.Firefox):
     def get_log(self, log_type: str):
-        step_settings = tp_classes.StepSettings(
+        step_settings = StepSettings(
             always_pass=True,
-            screenshot_condition=tp_enums.TakeScreenshotConditionType.Never,
+            screenshot_condition=TakeScreenshotConditionType.Never,
         )
-        with tp_classes.DriverStepSettings(self, step_settings):
+        with DriverStepSettings(self, step_settings):
             try:
                 return super().get_log(log_type)
-            except selenium_exceptions.WebDriverException:
+            except WebDriverException:
                 pass
 
 
