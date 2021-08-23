@@ -1,106 +1,77 @@
 from __future__ import annotations
 
 from overrides import overrides
-from pombase.web_node import GenericNode, Locator
-from inflection import parameterize
+from pombase import SingleWebNode, PageNode, NumberType
 
 
-class AccordionElement(GenericNode):
+class AccordionElementNode(SingleWebNode):
     @overrides
-    def __init__(self, title: str, parent: GenericNode = None):
-        super().__init__(
-            Locator(f".//div[contains(@class,'element-group')]"
-                    f"[.//div[contains(@class,'header-text') and .='{title}']]"),
-            parent=parent,
-            name=parameterize(title, separator="_"),
-            valid_count=1,
-        )
+    def __init__(self, title: str):
         self.title = title
+        super().__init__(
+            f".//div[contains(@class,'element-group')][.//div[contains(@class,'header-text') and .='{title}']]",
+            required=True,
+        )
 
     @overrides
     def init_node(self) -> None:
         super().init_node()
 
-        # title
-        GenericNode(Locator("div.header-text"), parent=self, name="title", valid_count=1)
+        self.swn_title = SingleWebNode("div.header-text", required=True)
 
-        # element list
-        GenericNode(Locator("div.element-list.show"), parent=self, name="element_list")
-
-    @overrides
-    def init_named_nodes(self) -> None:
-        self.nn_title = self.find_node("title")
-        self.nn_element_list = self.find_node("element_list")
+        self.swn_element_list = SingleWebNode("div.element-list.show")
 
     @property
     def is_expanded(self) -> bool:
-        return self.nn_element_list.is_visible()
+        return self.swn_element_list.is_element_visible()
 
     @is_expanded.setter
     def is_expanded(self, value: bool) -> None:
         if self.is_expanded != value:
-            self.nn_title.click()
+            self.swn_title.click()
 
     def select_sub_element(self, name: str) -> None:
-        element_list = self.nn_element_list
+        element_list = self.swn_element_list
 
-        class SubElement(GenericNode):
+        class SubElement(SingleWebNode):
             @overrides
-            def __init__(self, sub_element: str) -> None:
+            def __init__(self, title: str) -> None:
                 super().__init__(
-                    Locator(f".//ul[contains(@class,'menu-list')]/li[contains(@class,'btn')][.='{sub_element}']"),
+                    f".//ul[contains(@class,'menu-list')]/li[contains(@class,'btn')][.='{title}']",
                     parent=element_list,
                 )
-                self.sub_element = sub_element
+                self.title = title
 
         self.is_expanded = True
 
-        element = SubElement(name)
-        element.click()
-        element.parent = None
+        sub_element = SubElement(name)
+        sub_element.click()
+        sub_element.parent = None
 
 
-class WebConceptPage(GenericNode):
-    default_name = "toolsqa_web_concept"
+class WebConceptPage(PageNode):
+    # TODO: Remove this
+    # default_name = "pn_toolsqa_web_concept"
+    title = ""
 
     @overrides
     def init_node(self) -> None:
         super().init_node()
 
-        # page title
-        GenericNode(Locator(".//div[contains(@class,'main-header')]"), parent=self, name="page_title", valid_count=1)
+        self.swn_page_title = SingleWebNode(".//div[contains(@class,'main-header')]", required=True)
 
         # left pannel
-        left_pannel = GenericNode(Locator("div.left-pannel"), parent=self, name="left_pannel", valid_count=1)
-        AccordionElement("Elements", parent=left_pannel)
-        AccordionElement("Forms", parent=left_pannel)
-        AccordionElement("Alerts, Frame & Windows", parent=left_pannel)
-        AccordionElement("Widgets", parent=left_pannel)
-        AccordionElement("Interactions", parent=left_pannel)
-        AccordionElement("Book Store Application", parent=left_pannel)
+        self.swn_left_pannel = SingleWebNode("div.left-pannel", required=True)
+        self.swn_left_pannel__swn_elements = AccordionElementNode("Elements")
+        self.swn_left_pannel__swn_forms = AccordionElementNode("Forms")
+        self.swn_left_pannel__swn_alerts_frame_windows = AccordionElementNode("Alerts, Frame & Windows")
+        self.swn_left_pannel__swn_widgets = AccordionElementNode("Widgets")
+        self.swn_left_pannel__swn_interactions = AccordionElementNode("Interactions")
+        self.swn_left_pannel__swn_book_store_application = AccordionElementNode("Book Store Application")
 
     @overrides
-    def init_named_nodes(self) -> None:
-        self.nn_page_title = self.find_node("page_title")
-        self.nn_left_pannel = self.find_node("left_pannel")
-        self.nn_left_pannel__elements = self.find_node("left_pannel__elements")
-        self.nn_left_pannel__elements__title = self.find_node("left_pannel__elements__title")
-        self.nn_left_pannel__elements__element_list = self.find_node("left_pannel__elements__element_list")
-        self.nn_left_pannel__forms = self.find_node("left_pannel__forms")
-        self.nn_left_pannel__forms__title = self.find_node("left_pannel__forms__title")
-        self.nn_left_pannel__forms__element_list = self.find_node("left_pannel__forms__element_list")
-        self.nn_left_pannel__alerts_frame_windows = self.find_node("left_pannel__alerts_frame_windows")
-        self.nn_left_pannel__alerts_frame_windows__title = self.find_node("left_pannel__alerts_frame_windows__title")
-        self.nn_left_pannel__alerts_frame_windows__element_list = self.find_node(
-            "left_pannel__alerts_frame_windows__element_list")
-        self.nn_left_pannel__widgets = self.find_node("left_pannel__widgets")
-        self.nn_left_pannel__widgets__title = self.find_node("left_pannel__widgets__title")
-        self.nn_left_pannel__widgets__element_list = self.find_node("left_pannel__widgets__element_list")
-        self.nn_left_pannel__interactions = self.find_node("left_pannel__interactions")
-        self.nn_left_pannel__interactions__title = self.find_node("left_pannel__interactions__title")
-        self.nn_left_pannel__interactions__element_list = self.find_node("left_pannel__interactions__element_list")
-        self.nn_left_pannel__book_store_application = self.find_node("left_pannel__book_store_application")
-        self.nn_left_pannel__book_store_application__title = self.find_node(
-            "left_pannel__book_store_application__title")
-        self.nn_left_pannel__book_store_application__element_list = self.find_node(
-            "left_pannel__book_store_application__element_list")
+    def override_wait_until_loaded(self, timeout: NumberType = None) -> None:
+        super().override_wait_until_loaded(timeout)
+
+        # Page title is self.title
+        self.swn_page_title.wait_until_field_value_succeeded(lambda value: value == self.title, timeout=timeout)

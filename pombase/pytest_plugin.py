@@ -6,16 +6,16 @@ from _pytest.fixtures import FixtureRequest
 import os
 from enum import unique, Enum
 from overrides import overrides
-from seleniumbase.config import _sb_node
+import seleniumbase.config as sb_config
 # noinspection PyPackageRequirements
 from src.testproject.enums import EnvironmentVariable as EnumsEnvironmentVariable
 # noinspection PyPackageRequirements
 from src.testproject.enums.environmentvariable import EnvironmentVariable as EnvVarEnvironmentVariable
 
-import pombase.constant as constants
-import pombase.pombase_config as pb_config
-import pombase.pombase_case as pombase_case
-import pombase.util as pb_util
+from . import constant as constants
+from . import pombase_config as pb_config
+from . import pombase_case as pombase_case
+from . import util as pb_util
 
 PytestVariableType = Literal['string', 'pathlist', 'args', 'linelist', 'bool']
 
@@ -207,7 +207,7 @@ def pb(request: FixtureRequest):
         request.cls.sb._needs_tearDown = True
         request.cls.sb._using_sb_fixture = True
         request.cls.sb._using_sb_fixture_class = True
-        _sb_node[request.node.nodeid] = request.cls.sb
+        sb_config._sb_node[request.node.nodeid] = request.cls.sb
         yield request.cls.sb
         if request.cls.sb._needs_tearDown:
             request.cls.sb.tearDown()
@@ -240,7 +240,7 @@ def pb(request: FixtureRequest):
         sb._needs_tearDown = True
         sb._using_sb_fixture = True
         sb._using_sb_fixture_no_class = True
-        _sb_node[request.node.nodeid] = sb
+        sb_config._sb_node[request.node.nodeid] = sb
         yield sb
         if sb._needs_tearDown:
             sb.tearDown()

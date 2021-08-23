@@ -7,11 +7,11 @@ from src.testproject.classes import StepSettings, DriverStepSettings
 # noinspection PyPackageRequirements
 from src.testproject.enums import TakeScreenshotConditionType
 
-import pombase.types as tp_types
+from . import types as tp_types
 
 
 class Chrome(tp_webdriver.Chrome):
-    def set_script_timeout(self, time_to_wait: tp_types.Number) -> None:
+    def set_script_timeout(self, time_to_wait: tp_types.NumberType) -> None:
         step_settings = StepSettings(
             timeout=int(time_to_wait),
             always_pass=True,

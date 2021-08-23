@@ -7,7 +7,7 @@ from unicodedata import normalize
 from string import Formatter
 from dateutil.parser import parserinfo, parse
 
-import pombase.types as pb_types
+from . import types as pb_types
 
 T = TypeVar('T')
 
@@ -15,8 +15,8 @@ T = TypeVar('T')
 def wait_until(f: Callable[..., T],
                args: list = None,
                kwargs: dict = None,
-               timeout: pb_types.Number = 10,
-               step: pb_types.Number = 0.5,
+               timeout: pb_types.NumberType = 10,
+               step: pb_types.NumberType = 0.5,
                expected: Any = True,
                equals: bool = True,
                raise_error: str = None, ) -> (bool, T):

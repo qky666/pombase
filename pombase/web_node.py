@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections import namedtuple
 from functools import reduce
+from inflection import underscore
 from typing import Union, Iterable, Optional, Any, Callable
-from anytree import findall, findall_by_attr, AnyNode, PreOrderIter
+from anytree import findall, findall_by_attr, AnyNode, RenderTree, AsciiStyle
 from itertools import count
 from overrides import overrides, EnforceOverrides, final
 from copy import copy as python_copy, deepcopy
@@ -12,9 +13,9 @@ from cssselect.xpath import GenericTranslator
 from selenium.webdriver.common.by import By
 from seleniumbase.config.settings import LARGE_TIMEOUT
 
-import pombase.pombase_case as pombase_case
-import pombase.types as pb_types
-import pombase.util as pb_util
+from . import pombase_case as pombase_case
+from . import types as pb_types
+from . import util as pb_util
 
 NodeCount = Union[None, int, range, count, Iterable[int]]
 SelectorByTuple = namedtuple("SelectorByTuple", "selector by")
@@ -115,17 +116,15 @@ class GenericNode(AnyNode, EnforceOverrides):
     separator: str = "__"
     default_name: Optional[str] = None
     default_ignore_invisible: bool = True
-    default_named_node_prefix: str = "nn_"
-    default_init_named_nodes_decorator: str = "@overrides"
 
     @overrides
     def __init__(self,
-                 locator: PseudoLocator = None,
+                 locator: PseudoLocatorType = None,
                  *,
                  parent: GenericNode = None,
                  name: str = None,
                  valid_count: NodeCount = None,
-                 override_parent: PseudoLocator = None,
+                 override_parent: PseudoLocatorType = None,
                  pbc: pombase_case.PombaseCase = None,
                  **kwargs: Any,
                  ) -> None:
@@ -197,8 +196,11 @@ class GenericNode(AnyNode, EnforceOverrides):
 
         # Init node
         self.init_node()
-        self.init_named_nodes()
-        self.validate()
+
+        # TODO: Remove
+        # self.init_named_nodes()
+
+        # self.validate()
 
     ######################
     # Computed properties
@@ -228,18 +230,37 @@ class GenericNode(AnyNode, EnforceOverrides):
     ########
     @overrides
     def __repr__(self):
-        return self.full_name
+        return f"{self.__class__.__name__}({self.name if self.name is not None else 'node_unnamed'})"
 
-    #######
-    # dict
-    #######
-    def __getitem__(self, item) -> GenericNode:
-        return self.find_node(item)
+    def print_tree(self):
+        print(RenderTree(self, style=AsciiStyle))
 
-    def __setitem__(self, key: str, value: GenericNode) -> None:
-        # TODO: Rethink it
-        value.parent = self.parent
-        value.name = key
+    ########
+    # Magic
+    ########
+    def __getattr__(self, key: str) -> GenericNode:
+        if key.startswith("_"):
+            raise AttributeError
+        try:
+            return self.find_node(key)
+        except KeyError:
+            raise AttributeError
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        if not isinstance(value, GenericNode) or key == "parent" or key.startswith("_"):
+            super().__setattr__(key, value)
+        elif self.separator not in key:
+            value: GenericNode
+            if value.name is None:
+                value.name = key
+            if value.parent is None:
+                value.parent = self
+            super().__setattr__(key, value)
+        else:
+            # self.separator in key
+            path, name = key.rsplit(self.separator, 1)
+            parent_node = self.find_node(path)
+            setattr(parent_node, name, value)
 
     ############
     # Node name
@@ -266,12 +287,12 @@ class GenericNode(AnyNode, EnforceOverrides):
     ##############
     # Conversions
     ##############
-    def to_web_node(self) -> WebNode:
-        if isinstance(self, WebNode):
+    def to_web_node(self) -> SingleWebNode:
+        if isinstance(self, SingleWebNode):
             return self
         if self.is_multiple:
             raise RuntimeError(f"Trying to convert to WebNode a multiple GenericNode: {self}")
-        new_node = WebNode(
+        new_node = SingleWebNode(
             locator=self.locator,
             parent=None,
             name=self.name,
@@ -376,43 +397,44 @@ class GenericNode(AnyNode, EnforceOverrides):
     def init_node(self) -> None:
         pass
 
-    def init_named_nodes(self) -> None:
-        pass
-
-    @classmethod
-    def generate_init_named_nodes(cls,
-                                  decorator: str = None,
-                                  prefix: str = None,
-                                  init_args: list = None,
-                                  init_kwargs: dict = None) -> str:
-        if decorator is None:
-            decorator = cls.default_init_named_nodes_decorator
-        if prefix is None:
-            prefix = cls.default_named_node_prefix
-        if init_args is None:
-            init_args = []
-        if init_kwargs is None:
-            init_kwargs = {}
-
-        page = cls(*init_args, **init_kwargs)
-        nodes: Iterable[GenericNode] = PreOrderIter(
-            page,
-            filter_=lambda n: n.name is not None and n != page,
-        )
-        names = [node.relative_name_from_ascendant(page) for node in nodes]
-        names_code = "\n".join([f'\t\tself.{prefix}{name} = self.find_node("{name}")' for name in names])
-        code = f"\tdef init_named_nodes(self) -> None:\n{names_code}"
-        if len(decorator) > 0:
-            code = f"\t{decorator}\n{code}"
-        return code
-
-    @classmethod
-    def print_init_named_nodes(cls,
-                               decorator: str = None,
-                               prefix: str = None,
-                               init_args: list = None,
-                               init_kwargs: dict = None) -> None:
-        print(cls.generate_init_named_nodes(decorator, prefix, init_args, init_kwargs))
+    # TODO: Remove
+    # def init_named_nodes(self) -> None:
+    #     pass
+    #
+    # @classmethod
+    # def generate_init_named_nodes(cls,
+    #                               decorator: str = None,
+    #                               prefix: str = None,
+    #                               init_args: list = None,
+    #                               init_kwargs: dict = None) -> str:
+    #     if decorator is None:
+    #         decorator = cls.default_init_named_nodes_decorator
+    #     if prefix is None:
+    #         prefix = cls.default_named_node_prefix
+    #     if init_args is None:
+    #         init_args = []
+    #     if init_kwargs is None:
+    #         init_kwargs = {}
+    #
+    #     page = cls(*init_args, **init_kwargs)
+    #     nodes: Iterable[GenericNode] = PreOrderIter(
+    #         page,
+    #         filter_=lambda n: n.name is not None and n != page,
+    #     )
+    #     names = [node.relative_name_from_ascendant(page) for node in nodes]
+    #     names_code = "\n".join([f'\t\tself.{prefix}{name} = self.find_node("{name}")' for name in names])
+    #     code = f"\tdef init_named_nodes(self) -> None:\n{names_code}"
+    #     if len(decorator) > 0:
+    #         code = f"\t{decorator}\n{code}"
+    #     return code
+    #
+    # @classmethod
+    # def print_init_named_nodes(cls,
+    #                            decorator: str = None,
+    #                            prefix: str = None,
+    #                            init_args: list = None,
+    #                            init_kwargs: dict = None) -> None:
+    #     print(cls.generate_init_named_nodes(decorator, prefix, init_args, init_kwargs))
 
     ################
     # Finding nodes
@@ -516,8 +538,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         else:
             return False
 
-    @overrides
-    def get_multiple_nodes(self) -> Optional[list[WebNode]]:
+    def get_multiple_nodes(self) -> Optional[list[SingleWebNode]]:
         if self.is_multiple is False:
             return None
         if self.name is not None:
@@ -554,7 +575,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         return self._has_valid_count()
 
     def wait_until_valid_count_succeeded(self,
-                                         timeout: pb_types.Number = None,
+                                         timeout: pb_types.NumberType = None,
                                          raise_error: bool = True,
                                          force_count_not_zero: bool = True, ) -> bool:
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
@@ -570,7 +591,7 @@ class GenericNode(AnyNode, EnforceOverrides):
     # Loaded
     #########
     def wait_until_loaded_succeeded(self,
-                                    timeout: pb_types.Number = None,
+                                    timeout: pb_types.NumberType = None,
                                     raise_error: bool = True,
                                     force_count_not_zero: bool = True, ) -> bool:
         # Handle frames
@@ -604,19 +625,32 @@ class GenericNode(AnyNode, EnforceOverrides):
         else:
             if element_in_iframe is True:
                 self.switch_to_default_content()
+
+            # Custom wait_until_loaded logic
+            try:
+                self.override_wait_until_loaded(timeout)
+            except Exception as e:
+                if raise_error is True:
+                    raise e
+                else:
+                    return False
+
+            # All validations passed
             return True
+
+    def override_wait_until_loaded(self, timeout: pb_types.NumberType = None) -> None:
+        pass
 
     ######################
     # get/set field value
     ######################
-    def override_get_field_value(self, timeout: pb_types.Number = None) -> Any:
+    def override_get_field_value(self, timeout: pb_types.NumberType = None) -> Any:
         return self.default_get_field_value(timeout)
 
-    def override_set_field_value(self, value: Any, timeout: pb_types.Number = None) -> None:
+    def override_set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
         self.default_set_field_value(value, timeout)
 
-    @final
-    def get_field_value(self, timeout: pb_types.Number = None) -> Any:
+    def get_field_value(self, timeout: pb_types.NumberType = None) -> Any:
         for node in self.path:
             node: GenericNode
             rel_name = node.relative_name_of_descendant(self)
@@ -626,8 +660,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         else:
             return self.override_get_field_value(timeout)
 
-    @final
-    def set_field_value(self, value: Any, timeout: pb_types.Number = None) -> None:
+    def set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
         if value is None:
             return
         for node in self.path:
@@ -640,90 +673,108 @@ class GenericNode(AnyNode, EnforceOverrides):
         else:
             self.override_set_field_value(value, timeout)
 
-    def default_get_field_value(self, timeout: pb_types.Number = None) -> Any:
-        tag_name = self.get_tag_name(timeout)
-        text = self.get_text(timeout)
-        if pb_util.caseless_equal(tag_name, "input"):
-            element_type = self.get_attribute("type", timeout, hard_fail=False)
-            if isinstance(element_type, str) \
-                    and pb_util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
-                return self.is_selected()
-            elif text in [None, ""]:
-                return self.get_attribute("value", timeout, hard_fail=False)
-        elif pb_util.caseless_equal(tag_name, "select"):
-            return self.get_selected_options()
+    def default_get_field_value(self, timeout: pb_types.NumberType = None) -> Any:
+        if self.is_multiple:
+            return [node.default_get_field_value(timeout) for node in self.get_multiple_nodes()]
         else:
-            return text
-
-    def default_set_field_value(self, value: Any, timeout: pb_types.Number = None) -> None:
-        tag_name = self.get_tag_name(timeout)
-        element_type = self.get_attribute("type", timeout, hard_fail=False)
-        if pb_util.caseless_equal(tag_name, "input"):
-            if isinstance(element_type, str) and pb_util.caseless_equal(element_type, "text"):
-                self.update_text(str(value), timeout, retry=True)
-            elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "checkbox"):
-                if value is True or (isinstance(value, str)) and pb_util.caseless_equal(value, "true"):
-                    self.select_if_unselected()
-                elif value is False or (isinstance(value, str) and pb_util.caseless_equal(value, "false")):
-                    self.unselect_if_selected()
-                elif isinstance(value, str) and pb_util.caseless_equal(value, "toggle"):
-                    self.click()
+            tag_name = self.get_tag_name(timeout)
+            text = self.get_text(timeout)
+            if pb_util.caseless_equal(tag_name, "input"):
+                element_type = self.get_attribute("type", timeout, hard_fail=False)
+                if isinstance(element_type, str) \
+                        and pb_util.caseless_text_in_texts(element_type, ["checkbox", "radio"]):
+                    return self.is_selected()
+                elif text in [None, ""]:
+                    return self.get_attribute("value", timeout, hard_fail=False)
                 else:
-                    raise Exception(
-                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
-                    )
-            elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "radio"):
-                if value is True or (isinstance(value, str) and pb_util.caseless_equal(value, "true")):
-                    self.select_if_unselected()
-                else:
-                    raise Exception(
-                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
-                    )
-            elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "file"):
-                self.choose_file(value)
+                    return text
+            elif pb_util.caseless_equal(tag_name, "select"):
+                return self.get_selected_options()
             else:
-                raise Exception(
-                    f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
-                )
-        elif pb_util.caseless_equal(tag_name, "select"):
-            if isinstance(value, str):
-                self.select_option_by_text(value, timeout)
-            elif isinstance(value, int):
-                self.select_option_by_index(value, timeout)
-            elif isinstance(value, list):
-                if len(value) == 0:
-                    self.deselect_all_options(timeout)
-                else:
-                    for item in value:
-                        if isinstance(item, str):
-                            self.select_option_by_text(item, timeout)
-                        elif isinstance(item, int):
-                            self.select_option_by_index(item, timeout)
-                        else:
-                            raise Exception(
-                                f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. "
-                                f"Node: {self}",
-                            )
+                return text
+
+    def default_set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
+        if self.is_multiple and isinstance(value, list):
+            nodes = self.get_multiple_nodes()
+            for i in range(len(value)):
+                nodes[i].default_set_field_value(value[i], timeout)
         else:
-            self.update_text(str(value), timeout)
+            tag_name = self.get_tag_name(timeout)
+            element_type = self.get_attribute("type", timeout, hard_fail=False)
+            if pb_util.caseless_equal(tag_name, "input"):
+                if isinstance(element_type, str) and pb_util.caseless_equal(element_type, "text"):
+                    self.update_text(str(value), timeout, retry=True)
+                elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "checkbox"):
+                    if value is True or (isinstance(value, str)) and pb_util.caseless_equal(value, "true"):
+                        self.select_if_unselected()
+                    elif value is False or (isinstance(value, str) and pb_util.caseless_equal(value, "false")):
+                        self.unselect_if_selected()
+                    elif isinstance(value, str) and pb_util.caseless_equal(value, "toggle"):
+                        self.click()
+                    else:
+                        raise Exception(
+                            f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. "
+                            f"Node: {self}",
+                        )
+                elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "radio"):
+                    if value is True or (isinstance(value, str) and pb_util.caseless_equal(value, "true")):
+                        self.select_if_unselected()
+                    else:
+                        raise Exception(
+                            f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. "
+                            f"Node: {self}",
+                        )
+                elif isinstance(element_type, str) and pb_util.caseless_equal(element_type, "file"):
+                    self.choose_file(value)
+                else:
+                    raise Exception(
+                        f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. Node: {self}",
+                    )
+            elif pb_util.caseless_equal(tag_name, "select"):
+                if isinstance(value, str):
+                    self.select_option_by_text(value, timeout)
+                elif isinstance(value, int):
+                    self.select_option_by_index(value, timeout)
+                elif isinstance(value, list):
+                    if len(value) == 0:
+                        self.deselect_all_options(timeout)
+                    else:
+                        for item in value:
+                            if isinstance(item, str):
+                                self.select_option_by_text(item, timeout)
+                            elif isinstance(item, int):
+                                self.select_option_by_index(item, timeout)
+                            else:
+                                raise Exception(
+                                    f"Do not know how to set value '{value}' to tag={tag_name} type={element_type}. "
+                                    f"Node: {self}",
+                                )
+            else:
+                self.update_text(str(value), timeout)
 
     def wait_until_field_value_succeeded(self,
-                                         value: Any,
-                                         timeout: pb_types.Number = None,
+                                         condition: Union[Callable[[Any], bool], Any],
+                                         timeout: pb_types.NumberType = None,
                                          equals: bool = True,
                                          raise_error: bool = True) -> bool:
         if raise_error is True:
             raise_error = f"Timeout in wait_until_field_value_is: " \
-                          f"value={value}, timeout={timeout}, equals={equals}. Node: {self}"
+                          f"condition={condition}, timeout={timeout}, equals={equals}. Node: {self}"
         else:
             raise_error = None
         if timeout is None:
             timeout = LARGE_TIMEOUT
-        return pb_util.wait_until(self.get_field_value,
-                                  timeout=timeout,
-                                  expected=value,
-                                  equals=equals,
-                                  raise_error=raise_error)
+        if isinstance(condition, Callable):
+            return pb_util.wait_until(lambda: condition(self.get_field_value(timeout)),
+                                      timeout=timeout,
+                                      equals=equals,
+                                      raise_error=raise_error)
+        else:
+            return pb_util.wait_until(lambda: self.get_field_value(timeout),
+                                      expected=condition,
+                                      timeout=timeout,
+                                      equals=equals,
+                                      raise_error=raise_error)
 
     #######################
     # PomBaseCase methods
@@ -731,49 +782,49 @@ class GenericNode(AnyNode, EnforceOverrides):
     def count(self) -> int:
         return self.pbc.count(selector=self)
 
-    def is_iframe(self, timeout: pb_types.Number = None) -> bool:
+    def is_iframe(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.is_iframe(selector=self, timeout=timeout)
 
     def switch_to_default_content(self) -> None:
         self.pbc.switch_to_default_content()
 
-    def get_tag_name(self, timeout: pb_types.Number = None) -> str:
+    def get_tag_name(self, timeout: pb_types.NumberType = None) -> str:
         return self.pbc.get_tag_name(selector=self, timeout=timeout)
 
-    def get_selected_options(self, timeout: pb_types.Number = None) -> list[str]:
+    def get_selected_options(self, timeout: pb_types.NumberType = None) -> list[str]:
         return self.pbc.get_selected_options(selector=self, timeout=timeout)
 
-    def deselect_all_options(self, timeout: pb_types.Number = None) -> None:
+    def deselect_all_options(self, timeout: pb_types.NumberType = None) -> None:
         return self.pbc.deselect_all_options(selector=self, timeout=timeout)
 
     #######################
     # SeleniumBase methods
     #######################
-    def click(self, timeout: pb_types.Number = None, delay: int = 0) -> None:
+    def click(self, timeout: pb_types.NumberType = None, delay: int = 0) -> None:
         self.pbc.click(selector=self, timeout=timeout, delay=delay)
 
-    def slow_click(self, timeout: pb_types.Number = None) -> None:
+    def slow_click(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.slow_click(selector=self, timeout=timeout)
 
-    def double_click(self, timeout: pb_types.Number = None) -> None:
+    def double_click(self, timeout: pb_types.NumberType = None) -> None:
         return self.pbc.double_click(selector=self, timeout=timeout)
 
-    def click_chain(self, timeout: pb_types.Number = None, spacing: int = 0) -> None:
+    def click_chain(self, timeout: pb_types.NumberType = None, spacing: int = 0) -> None:
         self.pbc.click_chain(selector=self, timeout=timeout, spacing=spacing)
 
-    def add_text(self, text: str, timeout: pb_types.Number = None) -> None:
+    def add_text(self, text: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.add_text(selector=self, text=text, timeout=timeout)
 
-    def update_text(self, text: str, timeout: pb_types.Number = None, retry: bool = False) -> None:
+    def update_text(self, text: str, timeout: pb_types.NumberType = None, retry: bool = False) -> None:
         self.pbc.update_text(selector=self, text=text, timeout=timeout, retry=retry)
 
     def submit(self) -> None:
         self.pbc.submit(selector=self)
 
-    def clear(self, timeout: pb_types.Number = None) -> None:
+    def clear(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.clear(selector=self, timeout=timeout)
 
-    def focus(self, timeout: pb_types.Number = None) -> None:
+    def focus(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.focus(selector=self, timeout=timeout)
 
     def is_element_present(self) -> bool:
@@ -788,31 +839,31 @@ class GenericNode(AnyNode, EnforceOverrides):
     def is_text_visible(self, text: str) -> bool:
         return self.pbc.is_text_visible(text=text, selector=self)
 
-    def get_text(self, timeout: pb_types.Number = None) -> str:
+    def get_text(self, timeout: pb_types.NumberType = None) -> str:
         return self.pbc.get_text(selector=self, timeout=timeout)
 
     def get_attribute(self,
                       attribute: str,
-                      timeout: pb_types.Number = None,
+                      timeout: pb_types.NumberType = None,
                       hard_fail: bool = True, ) -> Union[None, str, bool, int]:
         return self.pbc.get_attribute(selector=self, attribute=attribute, timeout=timeout, hard_fail=hard_fail)
 
-    def set_attribute(self, attribute: str, value: Any, timeout: pb_types.Number = None) -> None:
+    def set_attribute(self, attribute: str, value: Any, timeout: pb_types.NumberType = None) -> None:
         self.pbc.set_attribute(selector=self, attribute=attribute, value=value, timeout=timeout)
 
     def set_attributes(self, attribute: str, value: Any) -> None:
         self.pbc.set_attributes(selector=self, attribute=attribute, value=value)
 
-    def remove_attribute(self, attribute: str, timeout: pb_types.Number = None) -> None:
+    def remove_attribute(self, attribute: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.remove_attribute(selector=self, attribute=attribute, timeout=timeout)
 
     def remove_attributes(self, attribute: str) -> None:
         self.pbc.remove_attributes(selector=self, attribute=attribute)
 
-    def get_property_value(self, property: str, timeout: pb_types.Number = None) -> str:
+    def get_property_value(self, property: str, timeout: pb_types.NumberType = None) -> str:
         return self.pbc.get_property_value(selector=self, property=property, timeout=timeout)
 
-    def get_image_url(self, timeout: pb_types.Number = None) -> Optional[str]:
+    def get_image_url(self, timeout: pb_types.NumberType = None) -> Optional[str]:
         return self.pbc.get_image_url(selector=self, timeout=timeout)
 
     def find_elements(self, limit: int = 0) -> list[WebElement]:
@@ -821,16 +872,16 @@ class GenericNode(AnyNode, EnforceOverrides):
     def find_visible_elements(self, limit: int = 0) -> list[WebElement]:
         return self.pbc.find_visible_elements(selector=self, limit=limit)
 
-    def click_visible_elements(self, limit: int = 0, timeout: pb_types.Number = None) -> None:
+    def click_visible_elements(self, limit: int = 0, timeout: pb_types.NumberType = None) -> None:
         self.pbc.click_visible_elements(selector=self, limit=limit, timeout=timeout)
 
-    def click_nth_visible_element(self, number, timeout: pb_types.Number = None) -> None:
+    def click_nth_visible_element(self, number, timeout: pb_types.NumberType = None) -> None:
         self.pbc.click_nth_visible_element(selector=self, number=number, timeout=timeout)
 
     def click_if_visible(self) -> None:
         self.pbc.click_if_visible(selector=self)
 
-    def is_selected(self, timeout: pb_types.Number = None) -> bool:
+    def is_selected(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.is_selected(selector=self, timeout=timeout)
 
     def select_if_unselected(self) -> None:
@@ -851,7 +902,7 @@ class GenericNode(AnyNode, EnforceOverrides):
     def hover_and_click(self,
                         click_selector: Union[str, GenericNode],
                         click_by: str = None,
-                        timeout: pb_types.Number = None, ) -> WebElement:
+                        timeout: pb_types.NumberType = None, ) -> WebElement:
         return self.pbc.hover_and_click(
             hover_selector=self,
             click_selector=click_selector,
@@ -862,7 +913,7 @@ class GenericNode(AnyNode, EnforceOverrides):
     def hover_and_double_click(self,
                                click_selector: Union[str, GenericNode],
                                click_by: str = None,
-                               timeout: pb_types.Number = None, ) -> WebElement:
+                               timeout: pb_types.NumberType = None, ) -> WebElement:
         return self.pbc.hover_and_double_click(
             hover_selector=self,
             click_selector=click_selector,
@@ -873,7 +924,7 @@ class GenericNode(AnyNode, EnforceOverrides):
     def drag_and_drop(self,
                       drop_selector: Union[str, GenericNode],
                       drop_by: str = None,
-                      timeout: pb_types.Number = None, ) -> WebElement:
+                      timeout: pb_types.NumberType = None, ) -> WebElement:
         return self.pbc.drag_and_drop(
             drag_selector=self,
             drop_selector=drop_selector,
@@ -881,19 +932,19 @@ class GenericNode(AnyNode, EnforceOverrides):
             timeout=timeout,
         )
 
-    def drag_and_drop_with_offset(self, x: int, y: int, timeout: pb_types.Number = None) -> WebElement:
+    def drag_and_drop_with_offset(self, x: int, y: int, timeout: pb_types.NumberType = None) -> WebElement:
         return self.pbc.drag_and_drop_with_offset(selector=self, x=x, y=y, timeout=timeout)
 
-    def select_option_by_text(self, option: str, timeout: pb_types.Number = None) -> None:
+    def select_option_by_text(self, option: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.select_option_by_text(dropdown_selector=self, option=option, timeout=timeout)
 
-    def select_option_by_index(self, option: int, timeout: pb_types.Number = None) -> None:
+    def select_option_by_index(self, option: int, timeout: pb_types.NumberType = None) -> None:
         self.pbc.select_option_by_index(dropdown_selector=self, option=option, timeout=timeout)
 
-    def select_option_by_value(self, option: Union[str, int], timeout: pb_types.Number = None) -> None:
+    def select_option_by_value(self, option: Union[str, int], timeout: pb_types.NumberType = None) -> None:
         self.pbc.select_option_by_value(dropdown_selector=self, option=option, timeout=timeout)
 
-    def switch_to_frame(self, timeout: pb_types.Number = None) -> None:
+    def switch_to_frame(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.switch_to_frame(frame=self, timeout=timeout)
 
     def bring_to_front(self) -> None:
@@ -920,10 +971,10 @@ class GenericNode(AnyNode, EnforceOverrides):
     def press_right_arrow(self="html", times: int = 1) -> None:
         self.pbc.press_right_arrow(selector=self, times=times)
 
-    def scroll_to(self, timeout: pb_types.Number = None) -> None:
+    def scroll_to(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.scroll_to(selector=self, timeout=timeout)
 
-    def slow_scroll_to(self, timeout: pb_types.Number = None) -> None:
+    def slow_scroll_to(self, timeout: pb_types.NumberType = None) -> None:
         self.pbc.slow_scroll_to(selector=self, timeout=timeout)
 
     def js_click(self, all_matches: bool = False) -> None:
@@ -956,83 +1007,83 @@ class GenericNode(AnyNode, EnforceOverrides):
     def remove_elements(self) -> None:
         self.pbc.remove_elements(selector=self)
 
-    def choose_file(self, file_path, timeout: pb_types.Number = None) -> None:
+    def choose_file(self, file_path, timeout: pb_types.NumberType = None) -> None:
         self.pbc.choose_file(selector=self, file_path=file_path, timeout=timeout)
 
-    def set_value(self, text: str, timeout: pb_types.Number = None) -> None:
+    def set_value(self, text: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.set_value(selector=self, text=text, timeout=timeout)
 
-    def js_update_text(self, text: str, timeout: pb_types.Number = None) -> None:
+    def js_update_text(self, text: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.js_update_text(selector=self, text=text, timeout=timeout)
 
-    def jquery_update_text(self, text: str, timeout: pb_types.Number = None) -> None:
+    def jquery_update_text(self, text: str, timeout: pb_types.NumberType = None) -> None:
         self.pbc.jquery_update_text(selector=self, text=text, timeout=timeout)
 
     def post_message_and_highlight(self, message) -> None:
         self.pbc.post_message_and_highlight(message, self)
 
-    def wait_for_element_present(self, timeout: pb_types.Number = None) -> WebElement:
+    def wait_for_element_present(self, timeout: pb_types.NumberType = None) -> WebElement:
         return self.pbc.wait_for_element_present(selector=self, timeout=timeout)
 
-    def assert_element_present(self, timeout: pb_types.Number = None) -> bool:
+    def assert_element_present(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_element_present(selector=self, timeout=timeout)
 
-    def wait_for_element_visible(self, timeout: pb_types.Number = None) -> WebElement:
+    def wait_for_element_visible(self, timeout: pb_types.NumberType = None) -> WebElement:
         return self.pbc.wait_for_element_visible(selector=self, timeout=timeout)
 
-    def assert_element_visible(self, timeout: pb_types.Number = None) -> bool:
+    def assert_element_visible(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_element_visible(selector=self, timeout=timeout)
 
     def wait_for_exact_text_visible(self,
                                     text: str,
-                                    timeout: pb_types.Number = None) -> Union[bool, WebElement]:
+                                    timeout: pb_types.NumberType = None) -> Union[bool, WebElement]:
         return self.pbc.wait_for_exact_text_visible(text=text, selector=self, timeout=timeout)
 
     def wait_for_text_visible(self,
                               text: str,
-                              timeout: pb_types.Number = None) -> Union[bool, WebElement]:
+                              timeout: pb_types.NumberType = None) -> Union[bool, WebElement]:
         return self.pbc.wait_for_text_visible(text=text, selector=self, timeout=timeout)
 
-    def assert_text_visible(self, text: str, timeout: pb_types.Number = None) -> bool:
+    def assert_text_visible(self, text: str, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_text_visible(text=text, selector=self, timeout=timeout)
 
-    def assert_exact_text(self, text: str, timeout: pb_types.Number = None) -> bool:
+    def assert_exact_text(self, text: str, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_exact_text(text=text, selector=self, timeout=timeout)
 
-    def wait_for_element_not_present(self, timeout: pb_types.Number = None) -> bool:
+    def wait_for_element_not_present(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.wait_for_element_not_present(selector=self, timeout=timeout)
 
-    def assert_element_not_present(self, timeout: pb_types.Number = None) -> bool:
+    def assert_element_not_present(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_element_not_present(selector=self, timeout=timeout)
 
-    def wait_for_element_not_visible(self, timeout: pb_types.Number = None) -> bool:
+    def wait_for_element_not_visible(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.wait_for_element_not_visible(selector=self, timeout=timeout)
 
-    def assert_element_not_visible(self, timeout: pb_types.Number = None) -> bool:
+    def assert_element_not_visible(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_element_not_visible(selector=self, timeout=timeout)
 
-    def wait_for_text_not_visible(self, text: str, timeout: pb_types.Number = None) -> bool:
+    def wait_for_text_not_visible(self, text: str, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.wait_for_text_not_visible(text=text, selector=self, timeout=timeout)
 
-    def assert_text_not_visible(self, text: str, timeout: pb_types.Number = None) -> bool:
+    def assert_text_not_visible(self, text: str, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.assert_text_not_visible(text=text, selector=self, timeout=timeout)
 
-    def deferred_assert_element(self, timeout: pb_types.Number = None) -> bool:
+    def deferred_assert_element(self, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.deferred_assert_element(selector=self, timeout=timeout)
 
-    def deferred_assert_text(self, text: str, timeout: pb_types.Number = None) -> bool:
+    def deferred_assert_text(self, text: str, timeout: pb_types.NumberType = None) -> bool:
         return self.pbc.deferred_assert_text(text=text, selector=self, timeout=timeout)
 
 
-class WebNode(GenericNode):
+class SingleWebNode(GenericNode):
     @overrides
     def __init__(self,
-                 locator: PseudoLocator,
+                 locator: PseudoLocatorType,
                  *,
-                 parent: Optional[GenericNode],
+                 parent: Optional[GenericNode] = None,
                  name: str = None,
                  required: bool = False,
-                 override_parent: PseudoLocator = None,
+                 override_parent: PseudoLocatorType = None,
                  ) -> None:
         valid_count = 1 if required else range(2)
         super().__init__(
@@ -1047,17 +1098,30 @@ class WebNode(GenericNode):
     def get_multiple_nodes(self) -> None:
         return None
 
+    ######################
+    # get/set field value
+    ######################
+    @final
+    @overrides
+    def get_field_value(self, timeout: pb_types.NumberType = None) -> Any:
+        return super().get_field_value(timeout)
+
+    @final
+    @overrides
+    def set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
+        super().set_field_value(value, timeout)
+
 
 class MultipleWebNode(GenericNode):
 
     @overrides
     def __init__(self,
-                 locator: PseudoLocator,
+                 locator: PseudoLocatorType,
                  *,
-                 parent: Optional[GenericNode],
+                 parent: Optional[GenericNode] = None,
                  name: str = None,
                  valid_count: NodeCount = None,
-                 override_parent: PseudoLocator = None,
+                 override_parent: PseudoLocatorType = None,
                  ) -> None:
         super().__init__(
             locator=locator,
@@ -1068,14 +1132,33 @@ class MultipleWebNode(GenericNode):
         )
 
     @overrides
-    def get_multiple_nodes(self) -> list[WebNode]:
+    def get_multiple_nodes(self) -> list[SingleWebNode]:
         nodes = super().get_multiple_nodes()
         return nodes
+
+    ######################
+    # get/set field value
+    ######################
+    @overrides
+    def override_get_field_value(self, timeout: pb_types.NumberType = None) -> list:
+        return self.default_get_field_value(timeout)
+
+    @final
+    @overrides
+    def get_field_value(self, timeout: pb_types.NumberType = None) -> list:
+        return super().get_field_value(timeout)
+
+    @final
+    @overrides
+    def set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
+        super().set_field_value(value, timeout)
 
 
 class PageNode(GenericNode):
     @overrides
     def __init__(self, pbc: pombase_case.PombaseCase = None, name: str = None) -> None:
+        if name is None and (self.default_name is None or len(self.default_name) == 0):
+            name = underscore(self.__class__.__name__)
         super().__init__(name=name, pbc=pbc)
 
     @overrides
@@ -1083,46 +1166,45 @@ class PageNode(GenericNode):
         return None
 
 
-class TableNode(WebNode):
+class TableNode(SingleWebNode):
     @overrides
     def __init__(self,
-                 locator: PseudoLocator,
+                 locator: PseudoLocatorType,
                  *,
                  parent: Optional[GenericNode] = None,
                  name: str = None,
                  required: bool = False,
-                 override_parent: PseudoLocator = None,
-                 header_row_locator: Optional[PseudoLocator] = "./thead/tr",
-                 header_cell_locator: Optional[PseudoLocator] = "./th",
-                 data_row_locator: PseudoLocator = "./tbody/tr",
-                 data_cell_locator: PseudoLocator = "./td",
+                 override_parent: PseudoLocatorType = None,
+                 header_row_locator: Optional[PseudoLocatorType] = "./thead/tr",
+                 header_cell_locator: Optional[PseudoLocatorType] = "./th",
+                 data_row_locator: PseudoLocatorType = "./tbody/tr",
+                 data_cell_locator: PseudoLocatorType = "./td",
                  ) -> None:
+        self.header_row_locator = get_locator(header_row_locator) if header_row_locator is not None else None
+        self.header_cell_locator = get_locator(header_cell_locator) if header_cell_locator is not None else None
+        self.data_row_locator = get_locator(data_row_locator) if data_row_locator is not None else None
+        self.data_cell_locator = get_locator(data_cell_locator) if data_cell_locator is not None else None
         super().__init__(locator=locator,
                          parent=parent,
                          name=name,
                          required=required,
                          override_parent=override_parent, )
-        self.header_row_locator = get_locator(header_row_locator) if header_row_locator is not None else None
-        self.header_cell_locator = get_locator(header_cell_locator) if header_cell_locator is not None else None
-        self.data_row_locator = get_locator(data_row_locator) if data_row_locator is not None else None
-        self.data_cell_locator = get_locator(data_cell_locator) if data_cell_locator is not None else None
 
     @overrides
     def init_node(self) -> None:
         super().init_node()
-        self.header_row = WebNode(self.header_row_locator, parent=self, name="header_row") \
-            if self.header_row_locator is not None else None
-        self.header_cells = MultipleWebNode(self.header_cell_locator, parent=self, name="header_cells") \
+        self.swn_header_row = SingleWebNode(self.header_row_locator) if self.header_row_locator is not None else None
+        self.mwn_header_cells = MultipleWebNode(self.header_cell_locator) \
             if self.header_cell_locator is not None else None
-        self.data_rows = MultipleWebNode(self.data_row_locator, parent=self, name="data_rows")
+        self.mwn_data_rows = MultipleWebNode(self.data_row_locator)
 
-    def get_header_cell_text(self, column: int, timeout: pb_types.Number = None) -> str:
-        return self.header_cells.get_multiple_nodes()[column].get_text(timeout)
+    def get_header_cell_text(self, column: int, timeout: pb_types.NumberType = None) -> str:
+        return self.mwn_header_cells.get_multiple_nodes()[column].get_text(timeout)
 
-    def get_header_cells_texts(self, timeout: pb_types.Number = None) -> list[str]:
-        return [cell.get_text(timeout) for cell in self.header_cells.get_multiple_nodes()]
+    def get_header_cells_texts(self, timeout: pb_types.NumberType = None) -> list[str]:
+        return [cell.get_text(timeout) for cell in self.mwn_header_cells.get_multiple_nodes()]
 
-    def get_header_cell_index(self, text: str, timeout: pb_types.Number = None) -> Optional[int]:
+    def get_header_cell_index(self, text: str, timeout: pb_types.NumberType = None) -> Optional[int]:
         header_texts = [t.strip() for t in self.get_header_cells_texts(timeout)]
         if text in header_texts:
             return header_texts.index(text)
@@ -1149,56 +1231,56 @@ class TableNode(WebNode):
 
         return None
 
-    def get_header_cell_node(self, text: str, timeout: pb_types.Number = None) -> Optional[WebNode]:
+    def get_header_cell_node(self, text: str, timeout: pb_types.NumberType = None) -> Optional[SingleWebNode]:
         index = self.get_header_cell_index(text, timeout=timeout)
         if index is None:
             return None
         else:
-            return self.header_cells.get_multiple_nodes()[index]
+            return self.mwn_header_cells.get_multiple_nodes()[index]
 
-    def get_data_row_cells(self, row: int, timeout: pb_types.Number = None) -> list[WebNode]:
+    def get_data_row_cells(self, row: int, timeout: pb_types.NumberType = None) -> list[SingleWebNode]:
         if timeout is None:
             timeout = LARGE_TIMEOUT
         pb_util.wait_until(
-            lambda: len(self.data_rows.get_multiple_nodes()) > row,
+            lambda: len(self.mwn_data_rows.get_multiple_nodes()) > row,
             timeout=timeout,
             raise_error=f"Table has not enough data rows. Row index searched: {row}",
         )
         cells_node = MultipleWebNode(
             self.data_cell_locator,
-            parent=self.data_rows.get_multiple_nodes()[row],
+            parent=self.mwn_data_rows.get_multiple_nodes()[row],
         )
         return cells_node.get_multiple_nodes()
 
-    def get_data_cell(self, row: int, column: Union[int, str], timeout: pb_types.Number = None) -> WebNode:
+    def get_data_cell(self, row: int, column: Union[int, str], timeout: pb_types.NumberType = None) -> SingleWebNode:
         return self.get_data_row_cells(row=row, timeout=timeout)[column]
 
     @property
-    def rows(self) -> int:
-        return len(self.data_rows.get_multiple_nodes())
+    def num_rows(self) -> int:
+        return len(self.mwn_data_rows.get_multiple_nodes())
 
     @property
-    def columns(self) -> int:
-        if self.rows > 0:
+    def num_columns(self) -> int:
+        if self.num_rows > 0:
             return len(self.get_data_row_cells(0))
-        elif self.header_cells is not None:
-            return len(self.header_cells.get_multiple_nodes())
+        elif self.mwn_header_cells is not None:
+            return len(self.mwn_header_cells.get_multiple_nodes())
         else:
             return 0
 
     def filter_rows(self,
                     row_filter: dict[Union[int, str], Callable[[Any], bool]],
-                    timeout: pb_types.Number = None) -> list[int]:
+                    timeout: pb_types.NumberType = None) -> list[int]:
         rows = []
         column_index_cache = {}
-        for row_number in range(self.rows):
-            for column, expected in row_filter.items():
+        for row_number in range(self.num_rows):
+            for column, condition in row_filter.items():
                 if isinstance(column, str):
                     if column not in column_index_cache:
                         column_index_cache[column] = self.get_header_cell_index(column, timeout=timeout)
                     column = column_index_cache[column]
                 cell_value = self.get_data_cell(row_number, column, timeout=timeout).get_field_value(timeout=timeout)
-                if expected(cell_value) is False:
+                if condition(cell_value) is False:
                     break
             else:
                 rows.append(row_number)
@@ -1258,7 +1340,7 @@ def as_xpath(selector: str, by: str = None) -> str:
         raise RuntimeError(f"Unknown 'by': {by}")
 
 
-def compound(locators: Iterable[Optional[PseudoLocator]]) -> Locator:
+def compound(locators: Iterable[Optional[PseudoLocatorType]]) -> Locator:
     loc_list: list[Locator] = []
     for pseudo_loc in locators:
         if isinstance(pseudo_loc, GenericNode) and pseudo_loc.override_parent is not None:
@@ -1283,7 +1365,7 @@ def infer_by_from_selector(selector: str) -> str:
         return By.CSS_SELECTOR
 
 
-def get_locator(obj: PseudoLocator) -> Optional[Locator]:
+def get_locator(obj: PseudoLocatorType) -> Optional[Locator]:
     if isinstance(obj, Locator):
         return obj
     elif isinstance(obj, GenericNode):
@@ -1298,4 +1380,4 @@ def get_locator(obj: PseudoLocator) -> Optional[Locator]:
         raise RuntimeError(f"Can not get object as a Locator: {obj}")
 
 
-PseudoLocator = Union[Locator, str, dict, Iterable, GenericNode]
+PseudoLocatorType = Union[Locator, str, dict, Iterable, GenericNode]

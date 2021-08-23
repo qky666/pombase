@@ -24,16 +24,16 @@ from src.testproject.enums import SleepTimingType, TakeScreenshotConditionType
 # noinspection PyPackageRequirements
 from src.testproject.enums.environmentvariable import EnvironmentVariable
 
-import pombase.webdriver as pb_webdriver
-import pombase.pombase_config as pb_config
-import pombase.constant as constants
-import pombase.util as pb_util
-import pombase.web_node as web_node
-import pombase.types as pb_types
+from . import webdriver as pb_webdriver
+from . import pombase_config as pb_config
+from . import constant as constants
+from . import util as pb_util
+from . import web_node as web_node
+from . import types as pb_types
 
 
-def auth_user_pass(proxy_string: Optional[str],
-                   browser_name: str) -> tuple[bool, Optional[str], Optional[str]]:
+def _auth_user_pass(proxy_string: Optional[str],
+                    browser_name: str) -> tuple[bool, Optional[str], Optional[str]]:
     proxy_auth = False
     proxy_user = None
     proxy_pass = None
@@ -65,7 +65,7 @@ def auth_user_pass(proxy_string: Optional[str],
     return proxy_auth, proxy_user, proxy_pass
 
 
-def recalculate_selector_by(selector: Union[str, web_node.GenericNode], by: str = None):
+def _recalculate_selector_by(selector: Union[str, web_node.GenericNode], by: str = None):
     if isinstance(selector, web_node.GenericNode):
         return selector.compound_locator.selector, selector.compound_locator.by
     elif by is None:
@@ -172,7 +172,7 @@ class PombaseCase(BaseCase, EnforceOverrides):
             d_p_r = pb_util.first_not_none(d_p_r, self._BaseCase__device_pixel_ratio)
             device_pixel_ratio = d_p_r
 
-            proxy_auth, proxy_user, proxy_pass = auth_user_pass(proxy_string, browser_name)
+            proxy_auth, proxy_user, proxy_pass = _auth_user_pass(proxy_string, browser_name)
             downloads_path = get_downloads_folder()
 
             driver_class = constants.TP_DRIVER_CLASS[browser]
@@ -545,8 +545,8 @@ class PombaseCase(BaseCase, EnforceOverrides):
     def is_iframe(self,
                   selector: Union[str, web_node.GenericNode],
                   by: str = None,
-                  timeout: pb_types.Number = None) -> bool:
-        selector, by = recalculate_selector_by(selector, by)
+                  timeout: pb_types.NumberType = None) -> bool:
+        selector, by = _recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
         if element is None:
             return False
@@ -560,7 +560,7 @@ class PombaseCase(BaseCase, EnforceOverrides):
                      selector: Union[str, web_node.GenericNode],
                      by: str = None,
                      timeout: Union[int, float] = None) -> str:
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         element = self.get_element(selector, by, timeout)
         return element.tag_name
 
@@ -568,7 +568,7 @@ class PombaseCase(BaseCase, EnforceOverrides):
                              selector: Union[str, web_node.GenericNode],
                              by: str = None,
                              timeout: Union[int, float] = None, ) -> list[str]:
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
         select = Select(element)
         selected: list[WebElement] = select.all_selected_options
@@ -578,7 +578,7 @@ class PombaseCase(BaseCase, EnforceOverrides):
                              selector: Union[str, web_node.GenericNode],
                              by: str = None,
                              timeout: Union[int, float] = None, ) -> None:
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         element = self.find_element(selector, by, timeout)
         select = Select(element)
         select.deselect_all()
@@ -589,17 +589,17 @@ class PombaseCase(BaseCase, EnforceOverrides):
 
     @overrides
     def click(self, selector, by=By.CSS_SELECTOR, timeout=None, delay=0):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().click(selector, by, timeout, delay)
 
     @overrides
     def slow_click(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().slow_click(selector, by, timeout)
 
     @overrides
     def double_click(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().double_click(selector, by, timeout)
 
     @overrides
@@ -610,428 +610,428 @@ class PombaseCase(BaseCase, EnforceOverrides):
 
     @overrides
     def update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().update_text(selector, text, by, timeout, retry)
 
     @overrides
     def add_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().add_text(selector, text, by, timeout)
 
     @overrides
     def type(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().type(selector, text, by, timeout, retry)
 
     @overrides
     def submit(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().submit(selector, by)
 
     @overrides
     def clear(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().clear(selector, by, timeout)
 
     @overrides
     def focus(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().focus(selector, by, timeout)
 
     @overrides
     def is_element_present(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_element_present(selector, by)
 
     @overrides
     def is_element_visible(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_element_visible(selector, by)
 
     @overrides
     def is_element_enabled(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_element_enabled(selector, by)
 
     @overrides
     def is_text_visible(self, text, selector="html", by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_text_visible(text, selector, by)
 
     @overrides
     def get_text(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().get_text(selector, by, timeout)
 
     @overrides
     def get_attribute(self, selector, attribute, by=By.CSS_SELECTOR, timeout=None, hard_fail=True):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().get_attribute(selector, attribute, by, timeout, hard_fail)
 
     @overrides
     def set_attribute(self, selector, attribute, value, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().set_attribute(selector, attribute, value, by, timeout)
 
     @overrides
     def set_attributes(self, selector, attribute, value, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().set_attributes(selector, attribute, value, by)
 
     @overrides
     def set_attribute_all(self, selector, attribute, value, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().set_attribute_all(selector, attribute, value, by)
 
     @overrides
     def remove_attribute(self, selector, attribute, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().remove_attribute(selector, attribute, by, timeout)
 
     @overrides
     def remove_attributes(self, selector, attribute, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().remove_attributes(selector, attribute, by)
 
     @overrides
     def get_property_value(self, selector, property, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().get_property_value(selector, property, by, timeout)
 
     @overrides
     def get_image_url(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().get_image_url(selector, by, timeout)
 
     @overrides
     def find_elements(self, selector, by=By.CSS_SELECTOR, limit=0):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().find_elements(selector, by, limit)
 
     @overrides
     def find_visible_elements(self, selector, by=By.CSS_SELECTOR, limit=0):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().find_visible_elements(selector, by, limit)
 
     @overrides
     def click_visible_elements(self, selector, by=By.CSS_SELECTOR, limit=0, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().click_visible_elements(selector, by, limit, timeout)
 
     @overrides
     def click_nth_visible_element(self, selector, number, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().click_nth_visible_element(selector, number, by, timeout)
 
     @overrides
     def click_if_visible(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().click_if_visible(selector, by)
 
     @overrides
     def is_checked(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_checked(selector, by, timeout)
 
     @overrides
     def is_selected(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_selected(selector, by, timeout)
 
     @overrides
     def check_if_unchecked(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().check_if_unchecked(selector, by)
 
     @overrides
     def select_if_unselected(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().select_if_unselected(selector, by)
 
     @overrides
     def uncheck_if_checked(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().uncheck_if_checked(selector, by)
 
     @overrides
     def unselect_if_selected(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().unselect_if_selected(selector, by)
 
     @overrides
     def is_element_in_an_iframe(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().is_element_in_an_iframe(selector, by)
 
     @overrides
     def switch_to_frame_of_element(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().switch_to_frame_of_element(selector, by)
 
     @overrides
     def hover_on_element(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().hover_on_element(selector, by)
 
     @overrides
     def hover_and_click(self, hover_selector, click_selector, hover_by=By.CSS_SELECTOR, click_by=By.CSS_SELECTOR,
                         timeout=None):
-        hover_selector, hover_by = recalculate_selector_by(hover_selector, hover_by)
-        click_selector, click_by = recalculate_selector_by(click_selector, click_by)
+        hover_selector, hover_by = _recalculate_selector_by(hover_selector, hover_by)
+        click_selector, click_by = _recalculate_selector_by(click_selector, click_by)
         return super().hover_and_click(hover_selector, click_selector, hover_by, click_by, timeout)
 
     @overrides
     def hover_and_double_click(self, hover_selector, click_selector, hover_by=By.CSS_SELECTOR, click_by=By.CSS_SELECTOR,
                                timeout=None):
-        hover_selector, hover_by = recalculate_selector_by(hover_selector, hover_by)
-        click_selector, click_by = recalculate_selector_by(click_selector, click_by)
+        hover_selector, hover_by = _recalculate_selector_by(hover_selector, hover_by)
+        click_selector, click_by = _recalculate_selector_by(click_selector, click_by)
         return super().hover_and_double_click(hover_selector, click_selector, hover_by, click_by, timeout)
 
     @overrides
     def drag_and_drop(self, drag_selector, drop_selector, drag_by=By.CSS_SELECTOR, drop_by=By.CSS_SELECTOR,
                       timeout=None):
-        drag_selector, drag_by = recalculate_selector_by(drag_selector, drag_by)
-        drop_selector, drop_by = recalculate_selector_by(drop_selector, drop_by)
+        drag_selector, drag_by = _recalculate_selector_by(drag_selector, drag_by)
+        drop_selector, drop_by = _recalculate_selector_by(drop_selector, drop_by)
         return super().drag_and_drop(drag_selector, drop_selector, drag_by, drop_by, timeout)
 
     @overrides
     def drag_and_drop_with_offset(self, selector, x, y, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().drag_and_drop_with_offset(selector, x, y, by, timeout)
 
     @overrides
     def select_option_by_text(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
-        dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
+        dropdown_selector, dropdown_by = _recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_text(dropdown_selector, option, dropdown_by, timeout)
 
     @overrides
     def select_option_by_index(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
-        dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
+        dropdown_selector, dropdown_by = _recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_index(dropdown_selector, option, dropdown_by, timeout)
 
     @overrides
     def select_option_by_value(self, dropdown_selector, option, dropdown_by=By.CSS_SELECTOR, timeout=None):
-        dropdown_selector, dropdown_by = recalculate_selector_by(dropdown_selector, dropdown_by)
+        dropdown_selector, dropdown_by = _recalculate_selector_by(dropdown_selector, dropdown_by)
         super().select_option_by_value(dropdown_selector, option, dropdown_by, timeout)
 
     @overrides
     def switch_to_frame(self, frame, timeout=None):
-        frame, _ = recalculate_selector_by(frame)
+        frame, _ = _recalculate_selector_by(frame)
         super().switch_to_frame(frame, timeout)
 
     @overrides
     def bring_to_front(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().bring_to_front(selector, by)
 
     @overrides
     def highlight_click(self, selector, by=By.CSS_SELECTOR, loops=3, scroll=True):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().highlight_click(selector, by, loops, scroll)
 
     @overrides
     def highlight_update_text(self, selector, text, by=By.CSS_SELECTOR, loops=3, scroll=True):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().highlight_update_text(selector, text, by, loops, scroll)
 
     @overrides
     def highlight(self, selector, by=By.CSS_SELECTOR, loops=None, scroll=True):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().highlight(selector, by, loops, scroll)
 
     @overrides
     def press_up_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().press_up_arrow(selector, times, by)
 
     @overrides
     def press_down_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().press_down_arrow(selector, times, by)
 
     @overrides
     def press_left_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().press_left_arrow(selector, times, by)
 
     @overrides
     def press_right_arrow(self, selector="html", times=1, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().press_right_arrow(selector, times, by)
 
     @overrides
     def scroll_to(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().scroll_to(selector, by, timeout)
 
     @overrides
     def scroll_to_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().scroll_to_element(selector, by, timeout)
 
     @overrides
     def slow_scroll_to(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().slow_scroll_to(selector, by, timeout)
 
     @overrides
     def slow_scroll_to_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().slow_scroll_to_element(selector, by, timeout)
 
     @overrides
     def js_click(self, selector, by=By.CSS_SELECTOR, all_matches=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().js_click(selector, by, all_matches)
 
     @overrides
     def js_click_all(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().js_click_all(selector, by)
 
     @overrides
     def jquery_click(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().jquery_click(selector, by)
 
     @overrides
     def jquery_click_all(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().jquery_click_all(selector, by)
 
     @overrides
     def hide_element(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().hide_element(selector, by)
 
     @overrides
     def hide_elements(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().hide_elements(selector, by)
 
     @overrides
     def show_element(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().show_element(selector, by)
 
     @overrides
     def show_elements(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().show_elements(selector, by)
 
     @overrides
     def remove_element(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().remove_element(selector, by)
 
     @overrides
     def remove_elements(self, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().remove_elements(selector, by)
 
     @overrides
     def choose_file(self, selector, file_path, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().choose_file(selector, file_path, by, timeout)
 
     @overrides
     def set_value(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().set_value(selector, text, by, timeout)
 
     @overrides
     def js_update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().js_update_text(selector, text, by, timeout)
 
     @overrides
     def js_type(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().js_type(selector, text, by, timeout)
 
     @overrides
     def set_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().set_text(selector, text, by, timeout)
 
     @overrides
     def jquery_update_text(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().jquery_update_text(selector, text, by, timeout)
 
     @overrides
     def input(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().input(selector, text, by, timeout, retry)
 
     @overrides
     def fill(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().fill(selector, text, by, timeout, retry)
 
     @overrides
     def write(self, selector, text, by=By.CSS_SELECTOR, timeout=None, retry=False):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().write(selector, text, by, timeout, retry)
 
     @overrides
     def send_keys(self, selector, text, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().send_keys(selector, text, by, timeout)
 
     @overrides
     def wait_for_element_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element_visible(selector, by, timeout)
 
     @overrides
     def wait_for_element_not_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element_not_present(selector, by, timeout)
 
     @overrides
     def assert_element_not_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element_not_present(selector, by, timeout)
 
     @overrides
     def post_message_and_highlight(self, message, selector, by=By.CSS_SELECTOR):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         super().post_message_and_highlight(message, selector, by)
 
     @overrides
     def wait_for_element_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element_present(selector, by, timeout)
 
     @overrides
     def wait_for_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element(selector, by, timeout)
 
     @overrides
     def get_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().get_element(selector, by, timeout)
 
     @overrides
     def assert_element_present(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element_present(selector, by, timeout)
 
     @overrides
     def find_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().find_element(selector, by, timeout)
 
     @overrides
     def assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element(selector, by, timeout)
 
     @overrides
     def assert_element_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element_visible(selector, by, timeout)
 
     @overrides
@@ -1052,85 +1052,85 @@ class PombaseCase(BaseCase, EnforceOverrides):
 
     @overrides
     def wait_for_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_text_visible(text, selector, by, timeout)
 
     @overrides
     def wait_for_exact_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_exact_text_visible(text, selector, by, timeout)
 
     @overrides
     def wait_for_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_text(text, selector, by, timeout)
 
     @overrides
     def find_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().find_text(text, selector, by, timeout)
 
     @overrides
     def assert_text_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_text_visible(text, selector, by, timeout)
 
     @overrides
     def assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_text(text, selector, by, timeout)
 
     @overrides
     def assert_exact_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_exact_text(text, selector, by, timeout)
 
     @overrides
     def wait_for_element_absent(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element_absent(selector, by, timeout)
 
     @overrides
     def assert_element_absent(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element_absent(selector, by, timeout)
 
     @overrides
     def wait_for_element_not_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_element_not_visible(selector, by, timeout)
 
     @overrides
     def assert_element_not_visible(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_element_not_visible(selector, by, timeout)
 
     @overrides
     def wait_for_text_not_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().wait_for_text_not_visible(text, selector, by, timeout)
 
     @overrides
     def assert_text_not_visible(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().assert_text_not_visible(text, selector, by, timeout)
 
     @overrides
     def deferred_assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().deferred_assert_element(selector, by, timeout)
 
     @overrides
     def deferred_assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().deferred_assert_text(text, selector, by, timeout)
 
     @overrides
     def delayed_assert_element(self, selector, by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().delayed_assert_element(selector, by, timeout)
 
     @overrides
     def delayed_assert_text(self, text, selector="html", by=By.CSS_SELECTOR, timeout=None):
-        selector, by = recalculate_selector_by(selector, by)
+        selector, by = _recalculate_selector_by(selector, by)
         return super().delayed_assert_text(text, selector, by, timeout)

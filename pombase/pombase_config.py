@@ -6,8 +6,8 @@ from src.testproject.enums import SleepTimingType, TakeScreenshotConditionType
 # noinspection PyPackageRequirements
 from src.testproject.enums.report_type import ReportType
 
-import pombase.pytest_plugin as pytest_plugin
-import pombase.constant as constants
+from . import pytest_plugin as pytest_plugin
+from . import constant as constants
 
 
 class PombaseConfig:

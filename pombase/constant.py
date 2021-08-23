@@ -5,18 +5,18 @@ from src.testproject.enums import SleepTimingType, TakeScreenshotConditionType
 # noinspection PyPackageRequirements
 from src.testproject.enums.report_type import ReportType
 
-import pombase.util as pb_util
-import pombase.webdriver as pb_webdriver
+from . import util as pb_util
+from . import webdriver as pb_webdriver
 
-PbWebDriver = Type[Union[pb_webdriver.Chrome,
-                         pb_webdriver.Edge,
-                         pb_webdriver.Firefox,
-                         pb_webdriver.Ie,
-                         pb_webdriver.Remote,
-                         pb_webdriver.Safari,
-                         pb_webdriver.Generic, ]]
+PbWebDriverType = Type[Union[pb_webdriver.Chrome,
+                             pb_webdriver.Edge,
+                             pb_webdriver.Firefox,
+                             pb_webdriver.Ie,
+                             pb_webdriver.Remote,
+                             pb_webdriver.Safari,
+                             pb_webdriver.Generic, ]]
 
-TP_DRIVER_CLASS: MutableMapping[str, PbWebDriver] = \
+TP_DRIVER_CLASS: MutableMapping[str, PbWebDriverType] = \
     pb_util.CaseInsensitiveDict(
         chrome=pb_webdriver.Chrome,
         edge=pb_webdriver.Edge,

@@ -3,11 +3,8 @@ testproject-python-sdk==1.2.2
 anytree==2.8.0
 python-dateutil==2.8.2
 pytest-dotenv==0.5.2
-overrides==6.1.0
 inflection==0.5.1
-# introspection==1.3
-# decorate-all-methods==0.0.2
-# pytest-base-url==1.4.2
+overrides==6.1.0
 selenium                # required by seleniumbase. Line nedded by PyCharm to not complain about using it directly
 pytest                  # required by seleniumbase. Line nedded by PyCharm to not complain about using it directly
 cssselect               # required by seleniumbase. Line nedded by PyCharm to not complain about using it directly
