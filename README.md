@@ -13,3 +13,4 @@ Page Object Model for SeleniumBase
 - CSV
 - Ideolog
 - Ini
+- deep-dict-completion
