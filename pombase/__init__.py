@@ -10,3 +10,4 @@ from .util import wait_until, DateUtil, CaseInsensitiveDict, clean, normalize_ca
 from .web_node import NodeCount, SelectorByTuple, Locator, GenericNode, SingleWebNode, MultipleWebNode, PageNode, TableNode, \
     node_from, as_css, as_xpath, compound, infer_by_from_selector, get_locator, PseudoLocatorType
 from .webdriver import Chrome, Firefox, Edge, Ie, Safari, Remote, Generic
+from .decorator import report_assertion_errors

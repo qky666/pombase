@@ -4,9 +4,6 @@ from pombase import PageNode, SingleWebNode
 
 
 class ToolsQAPage(PageNode):
-    # TODO: Remove this
-    # default_name = "pn_toolsqa"
-
     @overrides
     def init_node(self) -> None:
         super().init_node()

@@ -24,6 +24,7 @@ PytestVariableType = Literal['string', 'pathlist', 'args', 'linelist', 'bool']
 class PytestVar(Enum):
     """Enumeration of environment variable names used"""
 
+    PB_DISABLE_TESTPROJECT: PytestVar = ("PB_DISABLE_TESTPROJECT", "Disable TestProject", "bool", False)
     TP_DEV_TOKEN: PytestVar = ("TP_DEV_TOKEN", "TestProject developer token", "string", None)
     TP_AGENT_URL: PytestVar = ("TP_AGENT_URL", "TestProject agent url", "string", None)
     TP_DEFAULT_TIMEOUT: PytestVar = (

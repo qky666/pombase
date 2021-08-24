@@ -30,7 +30,14 @@ class PombaseConfig:
         self._pytest_config = c
 
     @property
+    def pb_disable_testproject(self) -> bool:
+        v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.PB_DISABLE_TESTPROJECT
+        return v.ini_value(self.pytest_config)
+
+    @property
     def tp_dev_token(self) -> Optional[str]:
+        if self.pb_disable_testproject:
+            return None
         v: pytest_plugin.PytestVar = pytest_plugin.PytestVar.TP_DEV_TOKEN
         return v.ini_value(self.pytest_config)
 

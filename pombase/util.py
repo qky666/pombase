@@ -6,6 +6,7 @@ from time import time as t_time, sleep
 from unicodedata import normalize
 from string import Formatter
 from dateutil.parser import parserinfo, parse
+from seleniumbase.config.settings import LARGE_TIMEOUT
 
 from . import types as pb_types
 
@@ -15,7 +16,7 @@ T = TypeVar('T')
 def wait_until(f: Callable[..., T],
                args: list = None,
                kwargs: dict = None,
-               timeout: pb_types.NumberType = 10,
+               timeout: Optional[pb_types.NumberType] = None,
                step: pb_types.NumberType = 0.5,
                expected: Any = True,
                equals: bool = True,
@@ -42,6 +43,8 @@ def wait_until(f: Callable[..., T],
         args = []
     if kwargs is None:
         kwargs = {}
+    if timeout is None:
+        timeout = LARGE_TIMEOUT
 
     if timeout < 0:
         raise RuntimeError(f"timeout should be >= 0. timeout = {timeout}")
@@ -84,7 +87,7 @@ def wait_until(f: Callable[..., T],
         if raise_error is not None:
             raise TimeoutError(
                 f"{raise_error}. f='{f}', args='{args}', kwargs='{kwargs}', timeout='{timeout}', step='{step}', "
-                f"expected='{expected}', equals='{equals}'",
+                f"expected='{expected}', equals='{equals}', last value={value}",
             )
         else:
             return False, value

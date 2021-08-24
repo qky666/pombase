@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections import namedtuple
 from functools import reduce
 from inflection import underscore
-from typing import Union, Iterable, Optional, Any, Callable
+from typing import Union, Iterable, Optional, Any, Callable, TypeVar
 from anytree import findall, findall_by_attr, AnyNode, RenderTree, AsciiStyle
 from itertools import count
 from overrides import overrides, EnforceOverrides, final
-from copy import copy as python_copy, deepcopy
+from copy import copy as python_copy
 from selenium.webdriver.remote.webelement import WebElement
 from cssselect.xpath import GenericTranslator
 from selenium.webdriver.common.by import By
@@ -34,7 +34,7 @@ class Locator:
     def __repr__(self):
         return f"Locator(_selector={self._selector}, _by={self._by}, _index={self._index})"
 
-    def copy(self, selector: str = None, by: str = None, index: int = None) -> Locator:
+    def copy_overriding(self, selector: str = None, by: str = None, index: int = None) -> Locator:
         return Locator(
             selector=pb_util.first_not_none(selector, self._selector),
             by=pb_util.first_not_none(by, self._by),
@@ -197,9 +197,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         # Init node
         self.init_node()
 
-        # TODO: Remove
-        # self.init_named_nodes()
-
+        # Validation -> Again, not here, but in _post_attach
         # self.validate()
 
     ######################
@@ -238,12 +236,12 @@ class GenericNode(AnyNode, EnforceOverrides):
     ########
     # Magic
     ########
-    def __getattr__(self, key: str) -> GenericNode:
+    def __getattr__(self, key: str):
         if key.startswith("_"):
             raise AttributeError
         try:
             return self.find_node(key)
-        except KeyError:
+        except RuntimeError:
             raise AttributeError
 
     def __setattr__(self, key: str, value: Any) -> None:
@@ -340,10 +338,10 @@ class GenericNode(AnyNode, EnforceOverrides):
             if self.locator is None:
                 raise RuntimeError(f"WebNode validation error. WebNode.name and WebNode.locator can not be both None: "
                                    f"name={self.name}, locator={self.locator}")
-            if 0 in self.valid_count:
-                raise RuntimeError(f"WebNode validation error. If WebNode.name is None, "
-                                   f"0 should not be in WebNode.valid_count: "
-                                   f"name={self.name}, valid_count={self.valid_count}")
+            # if 0 in self.valid_count:
+            #     raise RuntimeError(f"WebNode validation error. If WebNode.name is None, "
+            #                        f"0 should not be in WebNode.valid_count: "
+            #                        f"name={self.name}, valid_count={self.valid_count}")
 
         if self.name is not None:
             if len(self.name) == 0:
@@ -396,45 +394,6 @@ class GenericNode(AnyNode, EnforceOverrides):
     ############
     def init_node(self) -> None:
         pass
-
-    # TODO: Remove
-    # def init_named_nodes(self) -> None:
-    #     pass
-    #
-    # @classmethod
-    # def generate_init_named_nodes(cls,
-    #                               decorator: str = None,
-    #                               prefix: str = None,
-    #                               init_args: list = None,
-    #                               init_kwargs: dict = None) -> str:
-    #     if decorator is None:
-    #         decorator = cls.default_init_named_nodes_decorator
-    #     if prefix is None:
-    #         prefix = cls.default_named_node_prefix
-    #     if init_args is None:
-    #         init_args = []
-    #     if init_kwargs is None:
-    #         init_kwargs = {}
-    #
-    #     page = cls(*init_args, **init_kwargs)
-    #     nodes: Iterable[GenericNode] = PreOrderIter(
-    #         page,
-    #         filter_=lambda n: n.name is not None and n != page,
-    #     )
-    #     names = [node.relative_name_from_ascendant(page) for node in nodes]
-    #     names_code = "\n".join([f'\t\tself.{prefix}{name} = self.find_node("{name}")' for name in names])
-    #     code = f"\tdef init_named_nodes(self) -> None:\n{names_code}"
-    #     if len(decorator) > 0:
-    #         code = f"\t{decorator}\n{code}"
-    #     return code
-    #
-    # @classmethod
-    # def print_init_named_nodes(cls,
-    #                            decorator: str = None,
-    #                            prefix: str = None,
-    #                            init_args: list = None,
-    #                            init_kwargs: dict = None) -> None:
-    #     print(cls.generate_init_named_nodes(decorator, prefix, init_args, init_kwargs))
 
     ################
     # Finding nodes
@@ -490,23 +449,31 @@ class GenericNode(AnyNode, EnforceOverrides):
     ###############
     # Copy Node
     ###############
-    def copy(self, recursive: bool = False) -> GenericNode:
-        if recursive is True:
-            # make a deepcopy
-            return deepcopy(self)
-        else:
-            # Don not want to copy children
-            children = self.children
+    def copy(self: T, recursive: bool = False) -> T:
+        # store parent
+        parent = self.parent
+        self.parent = None
+
+        # Do not want to copy children
+        children = self.children
+        for child in children:
+            child.parent = None
+
+        node = python_copy(self)
+        # Restore parent
+        self.parent = parent
+
+        if recursive:
             for child in children:
-                child.parent = None
+                child: GenericNode
+                child_copy = child.copy(True)
+                child_copy.parent = node
 
-            node = python_copy(self)
+        # restore children
+        for child in children:
+            child.parent = self
 
-            # restore children
-            for child in children:
-                child.parent = self
-
-            return node
+        return node
 
     ##########
     # Replace
@@ -538,10 +505,10 @@ class GenericNode(AnyNode, EnforceOverrides):
         else:
             return False
 
-    def get_multiple_nodes(self) -> Optional[list[SingleWebNode]]:
-        if self.is_multiple is False:
-            return None
-        if self.name is not None:
+    def get_multiple_nodes(self) -> list[SingleWebNode]:
+        if self.is_multiple is False or self.locator is False:
+            return []
+        if self.name is not None and self.parent is not None:
             # Remove previous nodes (if any) to avoid duplicated names
             i = 0
             prev_nodes = findall_by_attr(self.parent, f"{self.name}_{i}", maxlevel=2)
@@ -555,7 +522,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         nodes = []
         for i in range(self.count()):
             new_node = self.copy(recursive=True)
-            new_node.locator = self.locator.copy(index=i)
+            new_node.locator = self.locator.copy_overriding(index=i)
             new_node.valid_count = range(2)
             if new_node.name is not None:
                 new_node.name = f"{new_node.name}_{i}"
@@ -578,9 +545,11 @@ class GenericNode(AnyNode, EnforceOverrides):
                                          timeout: pb_types.NumberType = None,
                                          raise_error: bool = True,
                                          force_count_not_zero: bool = True, ) -> bool:
+        if timeout is None:
+            timeout = LARGE_TIMEOUT
         plural = "s" if timeout == 1 or timeout == 1.0 else ""
-        raise_error = f"WebNode had not valid count after {timeout} second{plural}: {self}" \
-            if raise_error is True else None
+        raise_error = f"WebNode had not valid count after {timeout} second{plural}, " \
+                      f"force_count_not_zero={force_count_not_zero}: {self}" if raise_error is True else None
         success, _ = pb_util.wait_until(self._has_valid_count,
                                         args=[force_count_not_zero, ],
                                         timeout=timeout,
@@ -594,28 +563,30 @@ class GenericNode(AnyNode, EnforceOverrides):
                                     timeout: pb_types.NumberType = None,
                                     raise_error: bool = True,
                                     force_count_not_zero: bool = True, ) -> bool:
-        # Handle frames
         element_in_iframe = self.is_element_in_an_iframe()
-        if element_in_iframe is True:
-            for node in self.path[:-1]:
-                node: GenericNode
-                if node.is_iframe() is True:
-                    node.switch_to_frame(timeout)
-
-        valid_count = self.wait_until_valid_count_succeeded(timeout, raise_error, force_count_not_zero)
-        if valid_count is False:
+        # Handle special case: if locator is None, no valid_count validation.
+        if self.locator is not None:
+            # Handle frames
             if element_in_iframe is True:
-                self.switch_to_default_content()
-            return False
+                for node in self.path[:-1]:
+                    node: GenericNode
+                    if node.is_iframe() is True:
+                        node.switch_to_frame(timeout)
+
+            valid_count = self.wait_until_valid_count_succeeded(timeout, raise_error, force_count_not_zero)
+            if valid_count is False:
+                if element_in_iframe is True:
+                    self.switch_to_default_content()
+                return False
 
         children: list[GenericNode] = []
         if self.is_multiple:
             multiples = self.get_multiple_nodes()
             for node in multiples:
                 node.wait_until_loaded_succeeded(timeout, raise_error)
-                children = children + node.children
+                children = children + list(node.children)
         else:
-            children = self.children
+            children = list(self.children)
         for node in children:
             loaded = node.wait_until_loaded_succeeded(timeout, raise_error, force_count_not_zero=False)
             if loaded is False:
@@ -651,7 +622,7 @@ class GenericNode(AnyNode, EnforceOverrides):
         self.default_set_field_value(value, timeout)
 
     def get_field_value(self, timeout: pb_types.NumberType = None) -> Any:
-        for node in self.path:
+        for node in self.path[:-1]:
             node: GenericNode
             rel_name = node.relative_name_of_descendant(self)
             method = getattr(node, f"get_{rel_name}_field_value", None)
@@ -663,7 +634,7 @@ class GenericNode(AnyNode, EnforceOverrides):
     def set_field_value(self, value: Any, timeout: pb_types.NumberType = None) -> None:
         if value is None:
             return
-        for node in self.path:
+        for node in self.path[:-1]:
             node: GenericNode
             rel_name = node.relative_name_of_descendant(self)
             method = getattr(node, f"set_{rel_name}_field_value", None)
@@ -757,24 +728,26 @@ class GenericNode(AnyNode, EnforceOverrides):
                                          timeout: pb_types.NumberType = None,
                                          equals: bool = True,
                                          raise_error: bool = True) -> bool:
+        if timeout is None:
+            timeout = LARGE_TIMEOUT
         if raise_error is True:
             raise_error = f"Timeout in wait_until_field_value_is: " \
                           f"condition={condition}, timeout={timeout}, equals={equals}. Node: {self}"
         else:
             raise_error = None
-        if timeout is None:
-            timeout = LARGE_TIMEOUT
         if isinstance(condition, Callable):
-            return pb_util.wait_until(lambda: condition(self.get_field_value(timeout)),
-                                      timeout=timeout,
-                                      equals=equals,
-                                      raise_error=raise_error)
+            success, _ = pb_util.wait_until(lambda: condition(self.get_field_value(timeout)),
+                                            timeout=timeout,
+                                            equals=equals,
+                                            raise_error=raise_error)
+            return success
         else:
-            return pb_util.wait_until(lambda: self.get_field_value(timeout),
-                                      expected=condition,
-                                      timeout=timeout,
-                                      equals=equals,
-                                      raise_error=raise_error)
+            success, _ = pb_util.wait_until(lambda: self.get_field_value(timeout),
+                                            expected=condition,
+                                            timeout=timeout,
+                                            equals=equals,
+                                            raise_error=raise_error)
+            return success
 
     #######################
     # PomBaseCase methods
@@ -891,6 +864,12 @@ class GenericNode(AnyNode, EnforceOverrides):
         self.pbc.unselect_if_selected(selector=self)
 
     def is_element_in_an_iframe(self) -> bool:
+        if self.locator is None:
+            if self.parent is None:
+                return False
+            else:
+                parent: GenericNode = self.parent
+                return parent.is_element_in_an_iframe()
         return self.pbc.is_element_in_an_iframe(selector=self)
 
     def switch_to_frame_of_element(self) -> Optional[str]:
@@ -1094,10 +1073,6 @@ class SingleWebNode(GenericNode):
             override_parent=override_parent,
         )
 
-    @overrides
-    def get_multiple_nodes(self) -> None:
-        return None
-
     ######################
     # get/set field value
     ######################
@@ -1131,11 +1106,6 @@ class MultipleWebNode(GenericNode):
             override_parent=override_parent,
         )
 
-    @overrides
-    def get_multiple_nodes(self) -> list[SingleWebNode]:
-        nodes = super().get_multiple_nodes()
-        return nodes
-
     ######################
     # get/set field value
     ######################
@@ -1159,11 +1129,7 @@ class PageNode(GenericNode):
     def __init__(self, pbc: pombase_case.PombaseCase = None, name: str = None) -> None:
         if name is None and (self.default_name is None or len(self.default_name) == 0):
             name = underscore(self.__class__.__name__)
-        super().__init__(name=name, pbc=pbc)
-
-    @overrides
-    def get_multiple_nodes(self) -> None:
-        return None
+        super().__init__(name=name, pbc=pbc, valid_count=1)
 
 
 class TableNode(SingleWebNode):
@@ -1256,12 +1222,12 @@ class TableNode(SingleWebNode):
         return self.get_data_row_cells(row=row, timeout=timeout)[column]
 
     @property
-    def num_rows(self) -> int:
+    def get_num_rows(self) -> int:
         return len(self.mwn_data_rows.get_multiple_nodes())
 
     @property
-    def num_columns(self) -> int:
-        if self.num_rows > 0:
+    def get_num_columns(self) -> int:
+        if self.get_num_rows > 0:
             return len(self.get_data_row_cells(0))
         elif self.mwn_header_cells is not None:
             return len(self.mwn_header_cells.get_multiple_nodes())
@@ -1273,7 +1239,7 @@ class TableNode(SingleWebNode):
                     timeout: pb_types.NumberType = None) -> list[int]:
         rows = []
         column_index_cache = {}
-        for row_number in range(self.num_rows):
+        for row_number in range(self.get_num_rows):
             for column, condition in row_filter.items():
                 if isinstance(column, str):
                     if column not in column_index_cache:
@@ -1285,6 +1251,26 @@ class TableNode(SingleWebNode):
             else:
                 rows.append(row_number)
         return rows
+
+    def wait_until_num_rows_succeeded(self,
+                                      num_rows: int,
+                                      row_filter: dict[Union[int, str], Callable[[Any], bool]] = None,
+                                      timeout: pb_types.NumberType = None,
+                                      raise_error: bool = True) -> bool:
+        if row_filter is None:
+            row_filter = {}
+        if timeout is None:
+            timeout = LARGE_TIMEOUT
+        plural = "s" if timeout == 1 or timeout == 1.0 else ""
+        raise_error = f"TableNode had not {num_rows} rows using filter {row_filter} after {timeout} second{plural}: " \
+                      f"{self}" if raise_error is True else None
+        success, _ = pb_util.wait_until(
+            lambda: len(self.filter_rows(row_filter, timeout)),
+            timeout=timeout,
+            expected=num_rows,
+            raise_error=raise_error,
+        )
+        return success
 
 
 def node_from(selector: Union[str, GenericNode], by: str = None) -> GenericNode:
@@ -1381,3 +1367,4 @@ def get_locator(obj: PseudoLocatorType) -> Optional[Locator]:
 
 
 PseudoLocatorType = Union[Locator, str, dict, Iterable, GenericNode]
+T = TypeVar('T', bound=GenericNode)

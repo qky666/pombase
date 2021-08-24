@@ -1,9 +1,7 @@
 from __future__ import annotations
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-# noinspection PyPackageRequirements
-from src.testproject.decorator import report_assertion_errors
-import pombase.pombase_case as pom_base_case
+from pombase import PombaseCase, report_assertion_errors
 
 
 class TestBasic:
@@ -16,17 +14,17 @@ class TestBasic:
     )
 
     @report_assertion_errors
-    def test_simple(self, pb: pom_base_case.PombaseCase):
+    def test_simple(self, pb: PombaseCase):
         pb.click(".//div[text()='Acepto']", by=By.XPATH)
         pb.type("q", "TestProject" + Keys.ENTER, by=By.NAME)
         pb.click("a[href='https://testproject.io/']")
 
     @report_assertion_errors
-    def test_set_timeout(self, pb: pom_base_case.PombaseCase):
+    def test_set_timeout(self, pb: PombaseCase):
         pb.driver.set_script_timeout(2)
         pb.driver.quit()
 
     @report_assertion_errors
-    def test_get_log(self, pb: pom_base_case.PombaseCase):
+    def test_get_log(self, pb: PombaseCase):
         pb.driver.get_log("browser")
         pb.driver.quit()

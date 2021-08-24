@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from typing import Optional
 from overrides import overrides
-from pombase import SingleWebNode, PageNode, NumberType
+from pombase import SingleWebNode, PageNode, NumberType, GenericNode
+
+
+class SubElement(SingleWebNode):
+    @overrides(check_signature=False)
+    def __init__(self, title: str, parent: Optional[GenericNode] = None) -> None:
+        super().__init__(f".//ul[contains(@class,'menu-list')]/li[contains(@class,'btn')][.='{title}']",
+                         parent=parent)
+        self.title = title
 
 
 class AccordionElementNode(SingleWebNode):
-    @overrides
+    @overrides(check_signature=False)
     def __init__(self, title: str):
         self.title = title
         super().__init__(
@@ -30,35 +39,22 @@ class AccordionElementNode(SingleWebNode):
         if self.is_expanded != value:
             self.swn_title.click()
 
-    def select_sub_element(self, name: str) -> None:
-        element_list = self.swn_element_list
-
-        class SubElement(SingleWebNode):
-            @overrides
-            def __init__(self, title: str) -> None:
-                super().__init__(
-                    f".//ul[contains(@class,'menu-list')]/li[contains(@class,'btn')][.='{title}']",
-                    parent=element_list,
-                )
-                self.title = title
-
+    def do_select_sub_element(self, name: str) -> None:
         self.is_expanded = True
 
-        sub_element = SubElement(name)
+        sub_element = SubElement(name, parent=self.swn_element_list)
         sub_element.click()
         sub_element.parent = None
 
 
 class WebConceptPage(PageNode):
-    # TODO: Remove this
-    # default_name = "pn_toolsqa_web_concept"
     title = ""
 
     @overrides
     def init_node(self) -> None:
         super().init_node()
 
-        self.swn_page_title = SingleWebNode(".//div[contains(@class,'main-header')]", required=True)
+        self.swn_page_title = SingleWebNode("div.main-header", required=True)
 
         # left pannel
         self.swn_left_pannel = SingleWebNode("div.left-pannel", required=True)
@@ -74,4 +70,5 @@ class WebConceptPage(PageNode):
         super().override_wait_until_loaded(timeout)
 
         # Page title is self.title
-        self.swn_page_title.wait_until_field_value_succeeded(lambda value: value == self.title, timeout=timeout)
+        if len(self.title) > 0:
+            self.swn_page_title.wait_until_field_value_succeeded(self.title, timeout=timeout)

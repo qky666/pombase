@@ -1,11 +1,27 @@
 from __future__ import annotations
 
-from pombase import SingleWebNode, TableNode, NumberType, wait_until
+from typing import Optional
+from pombase import SingleWebNode, TableNode, NumberType, wait_until, PseudoLocatorType, GenericNode
 from overrides import overrides
 from pages.toolsqa.web_concept_page import WebConceptPage
 
 
 class RowActionNode(SingleWebNode):
+    @overrides(check_signature=False)
+    def __init__(self,
+                 locator: PseudoLocatorType = "div.action-buttons",
+                 *,
+                 parent: Optional[GenericNode] = None,
+                 name: str = None,
+                 required: bool = False,
+                 override_parent: PseudoLocatorType = None,
+                 ):
+        super().__init__(locator=locator,
+                         parent=parent,
+                         name=name,
+                         required=required,
+                         override_parent=override_parent)
+
     @overrides
     def init_node(self) -> None:
         super().init_node()
@@ -15,8 +31,6 @@ class RowActionNode(SingleWebNode):
 
 
 class WebTablesPage(WebConceptPage):
-    # TODO: Remove this
-    # default_name = "pn_toolsqa_web_tables"
     title = "Web Tables"
     expected_table_columns = ["First Name", "Last Name", "Age", "Email", "Salary", "Department", "Action"]
 
@@ -58,13 +72,13 @@ class WebTablesPage(WebConceptPage):
             last_name_txt = table.get_data_cell(i, last_name_column_index, timeout).get_text(timeout).strip()
             actions_cell_node = table.get_data_cell(i, action_column_index, timeout)
             if len(last_name_txt) > 0:
-                RowActionNode("div.action-buttons", parent=actions_cell_node, required=True)
+                RowActionNode(parent=actions_cell_node)
                 # actions_cell_node has new child, so wait_until_loaded_succeeded to wait for this new child
                 actions_cell_node.wait_until_loaded_succeeded(timeout)
 
-    def delete_row(self, index: int = 0) -> None:
+    def do_delete_row(self, index: int = 0) -> None:
         table = self.swn_table_wrapper__swn_table
         action_cell_node = table.get_data_cell(index, "Action")
-        row_action_node = RowActionNode("div.action-buttons", required=True, parent=action_cell_node)
+        row_action_node = RowActionNode(parent=action_cell_node)
         action_cell_node.wait_until_loaded_succeeded()
         row_action_node.swn_delete.click()
